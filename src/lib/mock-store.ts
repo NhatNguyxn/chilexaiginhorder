@@ -11,6 +11,8 @@ import {
   Table, 
   TableSession 
 } from '@/types';
+import { supabase } from '@/lib/supabase/client';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 // Store keys trong LocalStorage
 const STORAGE_KEYS = {
@@ -24,10 +26,12 @@ const STORAGE_KEYS = {
 
 class MockStore {
   private channel: BroadcastChannel | null = null;
+  private supabaseChannel: RealtimeChannel | null = null;
   private listeners: Set<() => void> = new Set();
 
   constructor() {
     if (typeof window !== 'undefined') {
+      // 1. Đồng bộ cục bộ giữa các tab trên cùng thiết bị
       try {
         this.channel = new BroadcastChannel('chile_realtime_channel');
         this.channel.onmessage = (event) => {
@@ -38,8 +42,82 @@ class MockStore {
       } catch (e) {
         console.warn('BroadcastChannel not supported', e);
       }
+
       this.initData();
+      this.initSupabaseRealtime();
     }
+  }
+
+  private initSupabaseRealtime() {
+    if (!supabase) return;
+
+    try {
+      this.supabaseChannel = supabase.channel('chile_global_orders', {
+        config: { broadcast: { self: false } },
+      });
+
+      this.supabaseChannel
+        .on('broadcast', { event: 'NEW_ORDER' }, ({ payload }) => {
+          if (payload?.order) {
+            this.handleRemoteNewOrder(payload.order, payload.session);
+          }
+        })
+        .on('broadcast', { event: 'UPDATE_STATUS' }, ({ payload }) => {
+          if (payload?.orderId && payload?.status) {
+            this.handleRemoteUpdateStatus(payload.orderId, payload.status);
+          }
+        })
+        .on('broadcast', { event: 'CLOSE_SESSION' }, ({ payload }) => {
+          if (payload?.sessionId) {
+            this.handleRemoteCloseSession(payload.sessionId, payload.totalAmount);
+          }
+        })
+        .subscribe((status) => {
+          console.log('[Supabase Realtime] Trạng thái kết nối kênh toàn cầu:', status);
+        });
+    } catch (err) {
+      console.warn('Lỗi khởi tạo Supabase Realtime channel', err);
+    }
+  }
+
+  private handleRemoteNewOrder(order: Order, session?: TableSession) {
+    const orders = this.getOrders();
+    if (orders.some((o) => o.id === order.id)) return; // Tránh trùng lặp
+
+    orders.push(order);
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+
+    if (session) {
+      const sessions = this.getSessions();
+      const existingIdx = sessions.findIndex((s) => s.id === session.id);
+      if (existingIdx > -1) {
+        sessions[existingIdx] = {
+          ...sessions[existingIdx],
+          total_amount: (sessions[existingIdx].total_amount || 0) + (session.total_amount || 0),
+        };
+      } else {
+        sessions.push(session);
+      }
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+    }
+
+    this.notifyListeners();
+  }
+
+  private handleRemoteUpdateStatus(orderId: string, status: 'new' | 'preparing' | 'served') {
+    const orders = this.getOrders().map((o) =>
+      o.id === orderId ? { ...o, status } : o
+    );
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.notifyListeners();
+  }
+
+  private handleRemoteCloseSession(sessionId: string, totalAmount: number) {
+    const sessions = this.getSessions().map((s) =>
+      s.id === sessionId ? { ...s, status: 'closed' as const, closed_at: new Date().toISOString(), total_amount: totalAmount } : s
+    );
+    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+    this.notifyListeners();
   }
 
   private initData() {
@@ -225,6 +303,20 @@ class MockStore {
 
     localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
     this.emitChange();
+
+    // Bắn realtime qua mạng cho các thiết bị khác (điện thoại của khách) biết bàn đã được thanh toán
+    if (this.supabaseChannel) {
+      try {
+        this.supabaseChannel.send({
+          type: 'broadcast',
+          event: 'CLOSE_SESSION',
+          payload: { sessionId, totalAmount },
+        });
+      } catch (e) {
+        console.warn('Lỗi broadcast CLOSE_SESSION qua Supabase', e);
+      }
+    }
+
     return sessions[index];
   }
 
@@ -298,6 +390,20 @@ class MockStore {
     localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
 
     this.emitChange();
+
+    // 🌟 QUAN TRỌNG: BẮN REALTIME BROADCAST QUA SUPABASE CHO MÁY TÍNH & THIẾT BỊ KHÁC
+    if (this.supabaseChannel) {
+      try {
+        this.supabaseChannel.send({
+          type: 'broadcast',
+          event: 'NEW_ORDER',
+          payload: { order: newOrder, session: { ...session, total_amount: (session.total_amount || 0) + orderTotal } },
+        });
+      } catch (e) {
+        console.warn('Lỗi broadcast NEW_ORDER qua Supabase', e);
+      }
+    }
+
     return newOrder;
   }
 
@@ -307,6 +413,19 @@ class MockStore {
     );
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     this.emitChange();
+
+    // Bắn realtime cho điện thoại khách biết món đang pha hoặc đã ra
+    if (this.supabaseChannel) {
+      try {
+        this.supabaseChannel.send({
+          type: 'broadcast',
+          event: 'UPDATE_STATUS',
+          payload: { orderId, status },
+        });
+      } catch (e) {
+        console.warn('Lỗi broadcast UPDATE_STATUS qua Supabase', e);
+      }
+    }
   }
 
   // --- STAFF ACCOUNTS ---
