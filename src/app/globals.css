@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 44% 89%; /* #F2EAD4 */
+    --foreground: 115 23% 16%; /* #22301E */
+  }
+
+  body {
+    background-color: #F2EAD4;
+    color: #22301E;
+    font-family: var(--font-be-vietnam), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Khóa cỡ chữ ô input tối thiểu 16px để ngăn iOS Safari auto-zoom */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Ẩn thanh cuộn thô trên mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Hiệu ứng bấm chạm nảy nhẹ kiểu mobile */
+.tap-active:active {
+  transform: scale(0.97);
+}
+
+/* Viền cổ điển thương hiệu */
+.border-frame {
+  border: 1.5px solid #AD8B52;
+}
+
+.border-frame-double {
+  border: 2px solid #AD8B52;
+  outline: 1px solid rgba(45, 71, 55, 0.4);
+  outline-offset: -5px;
+}
