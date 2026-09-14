@@ -8,6 +8,7 @@ import { mockStore } from '@/lib/mock-store';
 import { Order, Table, TableSession } from '@/types';
 import { soundManager } from '@/lib/audio';
 import { formatVND } from '@/lib/constants';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { 
   BellRing, 
   CheckCircle2, 
@@ -155,6 +156,19 @@ export default function StaffDashboard() {
             <p className="text-xs text-pine-2 mt-1">
               Theo dõi đơn đặt món tại bàn theo thời gian thực và quản lý thu tiền bàn.
             </p>
+            <div className="mt-2 flex items-center gap-2">
+              {isSupabaseConfigured ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-moss/20 text-moss border border-moss/30">
+                  <span className="w-2 h-2 rounded-full bg-moss animate-pulse" />
+                  Đã kết nối Cloud Realtime (Nhận đơn tức thì từ điện thoại)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-clay/15 text-clay border border-clay/30" title="Chưa nhận được biến Supabase trên Vercel. Cần Save biến và bấm Redeploy trên Vercel.">
+                  <span className="w-2 h-2 rounded-full bg-clay" />
+                  Chế độ nội bộ 1 máy (Chưa nhận được từ điện thoại — Cần bấm Redeploy trên Vercel)
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 self-end md:self-auto">
