@@ -68,3 +68,56 @@ export function formatVietnameseDateTime(date: Date = new Date()): {
     dateStr: `${dayOfWeek}, ${dd}/${mm}/${yyyy}`,
   };
 }
+
+/**
+ * Calculates shift duration in hours between check-in and check-out.
+ * Accurately handles normal daytime shifts and overnight shifts crossing midnight (0h).
+ * Supports ISO strings, Date instances, and "HH:mm" time strings.
+ */
+export function calculateShiftHours(
+  checkIn: string | Date,
+  checkOut: string | Date | null | undefined
+): number {
+  if (!checkOut) return 0;
+
+  // Handle "HH:mm" format (e.g. "22:00", "06:00")
+  if (
+    typeof checkIn === 'string' &&
+    typeof checkOut === 'string' &&
+    /^\d{1,2}:\d{2}(:\d{2})?$/.test(checkIn) &&
+    /^\d{1,2}:\d{2}(:\d{2})?$/.test(checkOut)
+  ) {
+    const [hIn, mIn] = checkIn.split(':').map(Number);
+    const [hOut, mOut] = checkOut.split(':').map(Number);
+    let diffMinutes = (hOut * 60 + mOut) - (hIn * 60 + mIn);
+    if (diffMinutes < 0) {
+      // Crossed midnight (0h)
+      diffMinutes += 24 * 60;
+    }
+    return Math.round((diffMinutes / 60) * 100) / 100;
+  }
+
+  // Handle ISO strings or Date objects
+  const inTime = typeof checkIn === 'string' ? new Date(checkIn).getTime() : checkIn.getTime();
+  const outTime = typeof checkOut === 'string' ? new Date(checkOut).getTime() : checkOut.getTime();
+
+  if (isNaN(inTime) || isNaN(outTime) || outTime <= inTime) return 0;
+
+  const diffMs = outTime - inTime;
+  return Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100;
+}
+
+/**
+ * Detects whether client time drifts from server time beyond a given threshold (default: 2 minutes).
+ */
+export function isTimeDriftDetected(
+  clientTime: string | number | Date,
+  serverTime: string | number | Date = new Date(),
+  thresholdMs: number = 2 * 60 * 1000 // 120,000 ms = 2 minutes
+): boolean {
+  const c = typeof clientTime === 'number' ? clientTime : new Date(clientTime).getTime();
+  const s = typeof serverTime === 'number' ? serverTime : new Date(serverTime).getTime();
+  if (isNaN(c) || isNaN(s)) return false;
+  return Math.abs(s - c) > thresholdMs;
+}
+
