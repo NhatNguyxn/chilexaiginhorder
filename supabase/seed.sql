@@ -1,47 +1,70 @@
 -- ==============================================================================
--- SEED DATA: CHỊ LỆ XAI GÍNH (12 MÓN THỰC TẾ & 10 BÀN BAN ĐẦU)
+-- SEED DATA: CHỊ LỆ XAI GÍNH
 -- ==============================================================================
 
--- 1. SEED DANH SÁCH 10 BÀN
-INSERT INTO tables (name, slug) VALUES
-  ('Bàn 01', 'ban-01'),
-  ('Bàn 02', 'ban-02'),
-  ('Bàn 03', 'ban-03'),
-  ('Bàn 04', 'ban-04'),
-  ('Bàn 05', 'ban-05'),
-  ('Bàn 06', 'ban-06'),
-  ('Bàn 07', 'ban-07'),
-  ('Bàn 08', 'ban-08'),
-  ('Bàn 09', 'ban-09'),
-  ('Bàn 10', 'ban-10')
+-- 1. DANH MỤC MENU (MENU_CATEGORIES)
+INSERT INTO menu_categories (id, name, sort_order, is_active)
+VALUES
+  ('c0000000-0000-0000-0000-000000000001', 'Trà thanh mát', 1, true),
+  ('c0000000-0000-0000-0000-000000000002', 'Nước ép tươi', 2, true),
+  ('c0000000-0000-0000-0000-000000000003', 'Trái cây dầm', 3, true),
+  ('c0000000-0000-0000-0000-000000000004', 'Đặc sản Hoàng Su Phì', 4, true)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  sort_order = EXCLUDED.sort_order;
+
+-- 2. MÓN ĂN & ĐỒ UỐNG (MENU_ITEMS)
+INSERT INTO menu_items (id, category_id, name, price, image_url, is_available, sort_order)
+VALUES
+  -- Trà thanh mát
+  ('m0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'Trà chanh', 15000, 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80', true, 1),
+  ('m0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000001', 'Trà tắc', 15000, 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=600&q=80', true, 2),
+  ('m0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000001', 'Trà chanh nha đam', 20000, 'https://images.unsplash.com/photo-1499638673689-79a0b5115d87?auto=format&fit=crop&w=600&q=80', true, 3),
+  ('m0000000-0000-0000-0000-000000000004', 'c0000000-0000-0000-0000-000000000001', 'Trà quấy nha đam', 20000, 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=600&q=80', true, 4),
+
+  -- Nước ép tươi
+  ('m0000000-0000-0000-0000-000000000005', 'c0000000-0000-0000-0000-000000000002', 'Nước ép cam', 30000, 'https://images.unsplash.com/photo-1613478223719-2ab802602423?auto=format&fit=crop&w=600&q=80', true, 5),
+  ('m0000000-0000-0000-0000-000000000006', 'c0000000-0000-0000-0000-000000000002', 'Nước ép dưa hấu', 30000, 'https://images.unsplash.com/photo-1589733955941-5eeaf752f6dd?auto=format&fit=crop&w=600&q=80', true, 6),
+  ('m0000000-0000-0000-0000-000000000007', 'c0000000-0000-0000-0000-000000000002', 'Nước ép dứa', 40000, 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?auto=format&fit=crop&w=600&q=80', true, 7),
+  ('m0000000-0000-0000-0000-000000000008', 'c0000000-0000-0000-0000-000000000002', 'Dừa tươi', 30000, 'https://images.unsplash.com/photo-1544253109-17d4eaec9bf1?auto=format&fit=crop&w=600&q=80', true, 8),
+
+  -- Trái cây dầm
+  ('m0000000-0000-0000-0000-000000000009', 'c0000000-0000-0000-0000-000000000003', 'Cóc dầm', 10000, 'https://images.unsplash.com/photo-1553530666-ba11a7da3888?auto=format&fit=crop&w=600&q=80', true, 9),
+  ('m0000000-0000-0000-0000-000000000010', 'c0000000-0000-0000-0000-000000000003', 'Xoài dầm', 10000, 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&w=600&q=80', true, 10),
+
+  -- Đặc sản Hoàng Su Phì
+  ('m0000000-0000-0000-0000-000000000011', 'c0000000-0000-0000-0000-000000000004', 'Nước dâu rừng Hoàng Su Phì', 20000, 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=600&q=80', true, 11),
+  ('m0000000-0000-0000-0000-000000000012', 'c0000000-0000-0000-0000-000000000004', 'Nước mận máu Hoàng Su Phì', 20000, 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=600&q=80', true, 12)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  price = EXCLUDED.price,
+  image_url = EXCLUDED.image_url,
+  is_available = EXCLUDED.is_available,
+  sort_order = EXCLUDED.sort_order;
+
+-- 3. DANH SÁCH BÀN (TABLES)
+-- Khởi tạo 10 bàn kèm slug và qr_token ngẫu nhiên
+INSERT INTO tables (id, name, slug, qr_token, is_active)
+VALUES
+  ('t0000000-0000-0000-0000-000000000001', 'Bàn 01', 'ban-01', 'tbl_tok_8f93ab01e4a749c0', true),
+  ('t0000000-0000-0000-0000-000000000002', 'Bàn 02', 'ban-02', 'tbl_tok_4d71ce02b9f348a1', true),
+  ('t0000000-0000-0000-0000-000000000003', 'Bàn 03', 'ban-03', 'tbl_tok_1a55fe03c2d641b2', true),
+  ('t0000000-0000-0000-0000-000000000004', 'Bàn 04', 'ban-04', 'tbl_tok_7c33bb04e9a842c3', true),
+  ('t0000000-0000-0000-0000-000000000005', 'Bàn 05', 'ban-05', 'tbl_tok_2f88aa05d1b745d4', true),
+  ('t0000000-0000-0000-0000-000000000006', 'Bàn 06', 'ban-06', 'tbl_tok_9b22ee06a4f944e5', true),
+  ('t0000000-0000-0000-0000-000000000007', 'Bàn 07', 'ban-07', 'tbl_tok_3e44dd07b8c643f6', true),
+  ('t0000000-0000-0000-0000-000000000008', 'Bàn 08', 'ban-08', 'tbl_tok_6a11cc08f5e347a7', true),
+  ('t0000000-0000-0000-0000-000000000009', 'Bàn 09', 'ban-09', 'tbl_tok_5c77bb09c6d246b8', true),
+  ('t0000000-0000-0000-0000-000000000010', 'Bàn 10', 'ban-10', 'tbl_tok_0d99aa10e7b145c9', true)
 ON CONFLICT (slug) DO NOTHING;
 
--- 2. SEED 4 DANH MỤC MENU
-INSERT INTO menu_categories (id, name, sort_order) VALUES
-  ('a1111111-1111-1111-1111-111111111111', 'Trà thanh mát', 1),
-  ('b2222222-2222-2222-2222-222222222222', 'Nước ép tươi', 2),
-  ('c3333333-3333-3333-3333-333333333333', 'Trái cây dầm', 3),
-  ('d4444444-4444-4444-4444-444444444444', 'Đặc sản Hoàng Su Phì', 4)
-ON CONFLICT (id) DO NOTHING;
-
--- 3. SEED 12 MÓN ĂN & ĐỒ UỐNG THỰC TẾ
-INSERT INTO menu_items (category_id, name, price, image_url, is_available, sort_order) VALUES
-  -- Nhóm 1: Trà thanh mát
-  ('a1111111-1111-1111-1111-111111111111', 'Trà chanh', 15000, 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80', true, 1),
-  ('a1111111-1111-1111-1111-111111111111', 'Trà tắc', 15000, 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=600&q=80', true, 2),
-  ('a1111111-1111-1111-1111-111111111111', 'Trà chanh nha đam', 20000, 'https://images.unsplash.com/photo-1499638673689-79a0b5115d87?auto=format&fit=crop&w=600&q=80', true, 3),
-  ('a1111111-1111-1111-1111-111111111111', 'Trà quấy nha đam', 20000, 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=600&q=80', true, 4),
-
-  -- Nhóm 2: Nước ép tươi
-  ('b2222222-2222-2222-2222-222222222222', 'Nước ép cam', 30000, 'https://images.unsplash.com/photo-1613478223719-2ab802602423?auto=format&fit=crop&w=600&q=80', true, 5),
-  ('b2222222-2222-2222-2222-222222222222', 'Nước ép dưa hấu', 30000, 'https://images.unsplash.com/photo-1589733955941-5eeaf752f6dd?auto=format&fit=crop&w=600&q=80', true, 6),
-  ('b2222222-2222-2222-2222-222222222222', 'Nước ép dứa', 40000, 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?auto=format&fit=crop&w=600&q=80', true, 7),
-  ('b2222222-2222-2222-2222-222222222222', 'Dừa tươi', 30000, 'https://images.unsplash.com/photo-1544253109-17d4eaec9bf1?auto=format&fit=crop&w=600&q=80', true, 8),
-
-  -- Nhóm 3: Trái cây dầm
-  ('c3333333-3333-3333-3333-333333333333', 'Cóc dầm', 10000, 'https://images.unsplash.com/photo-1553530666-ba11a7da3888?auto=format&fit=crop&w=600&q=80', true, 9),
-  ('c3333333-3333-3333-3333-333333333333', 'Xoài dầm', 10000, 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&w=600&q=80', true, 10),
-
-  -- Nhóm 4: Đặc sản Hoàng Su Phì
-  ('d4444444-4444-4444-4444-444444444444', 'Nước dâu rừng Hoàng Su Phì', 20000, 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=600&q=80', true, 11),
-  ('d4444444-4444-4444-4444-444444444444', 'Nước mận máu Hoàng Su Phì', 20000, 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=600&q=80', true, 12);
+-- ==============================================================================
+-- TẠO TÀI KHOẢN CHỦ QUÁN ĐẦU TIÊN (HƯỚNG DẪN / SCRIPT SQL)
+-- Khi bạn tạo user đầu tiên trong Supabase Auth (Authentication > Users):
+-- email: admin@quan.local (tên đăng nhập: admin)
+-- Chạy câu lệnh SQL dưới đây (thay <USER_ID_TU_AUTH_USERS> bằng UUID tương ứng):
+--
+-- INSERT INTO profiles (id, username, full_name, role, is_active, hourly_rate)
+-- VALUES ('<USER_ID_TU_AUTH_USERS>', 'admin', 'Chị Lệ (Chủ quán)', 'owner', true, 0)
+-- ON CONFLICT (id) DO UPDATE SET role = 'owner', is_active = true;
+-- ==============================================================================

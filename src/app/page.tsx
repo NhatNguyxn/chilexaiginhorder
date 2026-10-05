@@ -4,15 +4,15 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { STORE_NAME, STORE_TAGLINE } from '@/lib/constants';
-import { mockStore } from '@/lib/mock-store';
+import { tableService } from '@/lib/services';
 import { Table } from '@/types';
-import { QrCode, LayoutDashboard, Shield, Sparkles, UtensilsCrossed } from 'lucide-react';
+import { LayoutDashboard, Shield, UtensilsCrossed } from 'lucide-react';
 
 export default function HomePage() {
   const [tables, setTables] = useState<Table[]>([]);
 
   useEffect(() => {
-    setTables(mockStore.getTables());
+    tableService.getTables().then(setTables).catch(console.error);
   }, []);
 
   return (
@@ -64,7 +64,7 @@ export default function HomePage() {
                 {tables.slice(0, 10).map((t) => (
                   <Link
                     key={t.id}
-                    href={`/order/${t.slug}`}
+                    href={`/order/${t.qr_token || t.slug}`}
                     className="py-2 text-center text-xs font-bold rounded-lg border border-brass/50 bg-kraft hover:bg-brass hover:text-pine transition shadow-sm tap-active"
                   >
                     {t.name.replace('Bàn ', 'B')}
@@ -111,7 +111,7 @@ export default function HomePage() {
         {/* Thông tin hỗ trợ */}
         <div className="text-center pt-4">
           <p className="text-xs text-moss font-medium">
-            💡 Gợi ý: Mở 1 tab Khách (<code className="bg-kraft-dark px-1.5 py-0.5 rounded text-pine font-mono font-bold">/order/ban-01</code>) và 1 tab Nhân Viên (<code className="bg-kraft-dark px-1.5 py-0.5 rounded text-pine font-mono font-bold">/staff</code>) cạnh nhau để thử chuông báo đơn mới!
+            💡 Gợi ý: Quét mã QR tại bàn hoặc bấm vào các nút bàn ở trên để xem menu gọi món thời gian thực!
           </p>
         </div>
       </div>

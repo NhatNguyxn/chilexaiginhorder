@@ -1,15 +1,16 @@
 'use client';
 
-import { Order } from '@/types';
+import { Order, OrderStatus } from '@/types';
 import { formatVND } from '@/lib/constants';
-import { Clock, CheckCircle2, Flame, BellRing } from 'lucide-react';
+import { Clock, CheckCircle2, Flame, BellRing, XCircle } from 'lucide-react';
 
 interface OrderCardProps {
   order: Order;
-  onUpdateStatus: (orderId: string, status: 'new' | 'preparing' | 'served') => void;
+  onUpdateStatus: (orderId: string, status: OrderStatus) => void;
+  onCancelOrder?: (orderId: string) => void;
 }
 
-export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
+export default function OrderCard({ order, onUpdateStatus, onCancelOrder }: OrderCardProps) {
   const orderTotal = (order.items || []).reduce(
     (sum, it) => sum + it.price_at_order * it.quantity,
     0
@@ -27,6 +28,8 @@ export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
           ? 'border-clay ring-2 ring-clay/20 animate-pulse-slow'
           : order.status === 'preparing'
           ? 'border-brass ring-1 ring-brass/30'
+          : order.status === 'cancelled'
+          ? 'border-clay/40 opacity-70 bg-clay/5'
           : 'border-brass/30 opacity-90'
       }`}
     >
@@ -37,6 +40,8 @@ export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
             ? 'bg-clay text-white'
             : order.status === 'preparing'
             ? 'bg-brass text-pine font-bold'
+            : order.status === 'cancelled'
+            ? 'bg-clay/20 text-clay font-bold'
             : 'bg-kraft-dark/40 text-pine'
         }`}
       >
@@ -44,6 +49,7 @@ export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
           {order.status === 'new' && <BellRing className="w-4 h-4 animate-bounce" />}
           {order.status === 'preparing' && <Flame className="w-4 h-4" />}
           {order.status === 'served' && <CheckCircle2 className="w-4 h-4 text-moss" />}
+          {order.status === 'cancelled' && <XCircle className="w-4 h-4 text-clay" />}
           <span className="font-serif font-bold text-sm tracking-wide">
             {order.table?.name || `Bàn #${order.table_id.slice(-3)}`}
           </span>
@@ -65,7 +71,7 @@ export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
                   <span className="font-bold text-pine text-sm">
                     {it.quantity}x
                   </span>
-                  <span className="font-semibold text-pine text-sm">
+                  <span className={`font-semibold text-pine text-sm ${order.status === 'cancelled' ? 'line-through text-pine-2' : ''}`}>
                     {it.menu_item?.name || 'Món nước'}
                   </span>
                 </div>
@@ -75,7 +81,7 @@ export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
                   </p>
                 )}
               </div>
-              <span className="text-xs font-semibold text-pine-2 whitespace-nowrap">
+              <span className={`text-xs font-semibold text-pine-2 whitespace-nowrap ${order.status === 'cancelled' ? 'line-through' : ''}`}>
                 {formatVND(it.price_at_order * it.quantity)}
               </span>
             </div>
@@ -89,10 +95,17 @@ export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
           </div>
         )}
 
+        {/* Cancellation Reason if cancelled */}
+        {order.status === 'cancelled' && (
+          <div className="bg-clay/10 border border-clay/30 rounded-lg p-2 text-xs text-clay font-medium">
+            <span className="font-bold">Lý do hủy:</span> {order.cancellation_reason || 'Đã hủy tại quầy'}
+          </div>
+        )}
+
         {/* Subtotal */}
         <div className="pt-2 border-t border-brass/20 flex items-center justify-between text-xs">
           <span className="text-pine-2 font-medium">Tổng đợt gọi này:</span>
-          <span className="font-bold text-clay text-sm">
+          <span className={`font-bold text-clay text-sm ${order.status === 'cancelled' ? 'line-through' : ''}`}>
             {formatVND(orderTotal)}
           </span>
         </div>
@@ -101,28 +114,56 @@ export default function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
       {/* Action Footer */}
       <div className="px-4 py-2.5 bg-kraft-soft/80 border-t border-brass/20 flex items-center gap-2">
         {order.status === 'new' && (
-          <button
-            onClick={() => onUpdateStatus(order.id, 'preparing')}
-            className="flex-1 py-2 bg-brass hover:bg-brass-soft text-pine font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 tap-active"
-          >
-            <Flame className="w-3.5 h-3.5" />
-            <span>Pha chế</span>
-          </button>
+          <>
+            <button
+              onClick={() => onUpdateStatus(order.id, 'preparing')}
+              className="flex-1 py-2 bg-brass hover:bg-brass-soft text-pine font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 tap-active"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>Pha chế</span>
+            </button>
+            {onCancelOrder && (
+              <button
+                onClick={() => onCancelOrder(order.id)}
+                className="py-2 px-3 border border-clay/40 text-clay hover:bg-clay/10 font-bold text-xs rounded-lg transition tap-active"
+                title="Hủy đơn này"
+              >
+                Hủy đơn
+              </button>
+            )}
+          </>
         )}
 
         {order.status === 'preparing' && (
-          <button
-            onClick={() => onUpdateStatus(order.id, 'served')}
-            className="flex-1 py-2 bg-moss hover:bg-moss/90 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 tap-active"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Đã ra món</span>
-          </button>
+          <>
+            <button
+              onClick={() => onUpdateStatus(order.id, 'served')}
+              className="flex-1 py-2 bg-moss hover:bg-moss/90 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 tap-active"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Đã ra món</span>
+            </button>
+            {onCancelOrder && (
+              <button
+                onClick={() => onCancelOrder(order.id)}
+                className="py-2 px-3 border border-clay/40 text-clay hover:bg-clay/10 font-bold text-xs rounded-lg transition tap-active"
+                title="Hủy đơn này"
+              >
+                Hủy đơn
+              </button>
+            )}
+          </>
         )}
 
         {order.status === 'served' && (
           <div className="w-full text-center text-xs font-semibold text-moss py-1">
             ✓ Đã phục vụ đủ món
+          </div>
+        )}
+
+        {order.status === 'cancelled' && (
+          <div className="w-full text-center text-xs font-semibold text-clay py-1">
+            ✕ Đơn đã hủy
           </div>
         )}
       </div>

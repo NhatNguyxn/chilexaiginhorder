@@ -131,16 +131,16 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
 ];
 
 export const INITIAL_TABLES: Table[] = [
-  { id: 'tbl-1', name: 'Bàn 01', slug: 'ban-01' },
-  { id: 'tbl-2', name: 'Bàn 02', slug: 'ban-02' },
-  { id: 'tbl-3', name: 'Bàn 03', slug: 'ban-03' },
-  { id: 'tbl-4', name: 'Bàn 04', slug: 'ban-04' },
-  { id: 'tbl-5', name: 'Bàn 05', slug: 'ban-05' },
-  { id: 'tbl-6', name: 'Bàn 06', slug: 'ban-06' },
-  { id: 'tbl-7', name: 'Bàn 07', slug: 'ban-07' },
-  { id: 'tbl-8', name: 'Bàn 08', slug: 'ban-08' },
-  { id: 'tbl-9', name: 'Bàn 09', slug: 'ban-09' },
-  { id: 'tbl-10', name: 'Bàn 10', slug: 'ban-10' },
+  { id: 'tbl-1', name: 'Bàn 01', slug: 'ban-01', qr_token: 'tbl_tok_8f93ab01e4a749c0' },
+  { id: 'tbl-2', name: 'Bàn 02', slug: 'ban-02', qr_token: 'tbl_tok_4d71ce02b9f348a1' },
+  { id: 'tbl-3', name: 'Bàn 03', slug: 'ban-03', qr_token: 'tbl_tok_1a55fe03c2d641b2' },
+  { id: 'tbl-4', name: 'Bàn 04', slug: 'ban-04', qr_token: 'tbl_tok_7c33bb04e9a842c3' },
+  { id: 'tbl-5', name: 'Bàn 05', slug: 'ban-05', qr_token: 'tbl_tok_2f88aa05d1b745d4' },
+  { id: 'tbl-6', name: 'Bàn 06', slug: 'ban-06', qr_token: 'tbl_tok_9b22ee06a4f944e5' },
+  { id: 'tbl-7', name: 'Bàn 07', slug: 'ban-07', qr_token: 'tbl_tok_3e44dd07b8c643f6' },
+  { id: 'tbl-8', name: 'Bàn 08', slug: 'ban-08', qr_token: 'tbl_tok_6a11cc08f5e347a7' },
+  { id: 'tbl-9', name: 'Bàn 09', slug: 'ban-09', qr_token: 'tbl_tok_5c77bb09c6d246b8' },
+  { id: 'tbl-10', name: 'Bàn 10', slug: 'ban-10', qr_token: 'tbl_tok_0d99aa10e7b145c9' },
 ];
 
 export function formatVND(amount: number): string {

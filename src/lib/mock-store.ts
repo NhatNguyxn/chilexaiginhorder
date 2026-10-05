@@ -157,8 +157,8 @@ class MockStore {
     }
     if (!localStorage.getItem(STORAGE_KEYS.STAFF)) {
       const defaultStaff: StaffUser[] = [
-        { id: 'admin-1', full_name: 'Chị Lệ (Chủ quán)', role: 'admin', is_active: true, email: 'admin@chile.vn' },
-        { id: 'staff-1', full_name: 'Nhân viên Ca Sáng', role: 'staff', is_active: true, email: 'nhanvien@chile.vn' },
+        { id: 'admin-1', username: 'admin', full_name: 'Chị Lệ (Chủ quán)', role: 'owner', is_active: true, hourly_rate: 0 },
+        { id: 'staff-1', username: 'staff', full_name: 'Nhân viên Ca Sáng', role: 'staff', is_active: true, hourly_rate: 25000 },
       ];
       localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(defaultStaff));
     }

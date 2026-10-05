@@ -1,37 +1,103 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { STORE_NAME } from '@/lib/constants';
-import { Shield, Coffee, UserCheck, ArrowRight, Lock } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { getDefaultRedirectForRole } from '@/lib/permissions';
+import { UserRole } from '@/types';
+import { Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const searchParams = useSearchParams();
+  const redirectTarget = searchParams.get('redirect');
+  const errorParam = searchParams.get('error');
+
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(
+    errorParam === 'account_disabled'
+      ? 'Tài khoản của bạn đã bị khóa hoặc vô hiệu hóa. Vui lòng liên hệ chủ quán.'
+      : ''
+  );
 
-  const handleDemoLogin = (role: 'admin' | 'staff') => {
-    setLoading(true);
-    // Simulating authentication and redirecting
-    setTimeout(() => {
-      if (role === 'admin') {
-        router.push('/admin/tables');
-      } else {
-        router.push('/staff');
-      }
-    }, 400);
-  };
-
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+
+    const cleanUsername = username.trim().toLowerCase();
+    if (!cleanUsername || !password) {
+      setErrorMessage('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.');
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      // Default staff redirect
-      router.push('/staff');
-    }, 400);
+
+    try {
+      if (!isSupabaseConfigured || !supabase) {
+        // Fallback for local preview if Supabase keys are not yet filled
+        if (cleanUsername === 'admin' || cleanUsername === 'staff') {
+          router.push(cleanUsername === 'admin' ? '/admin/tables' : '/staff');
+          return;
+        }
+        setErrorMessage('Hệ thống Supabase chưa được cấu hình biến môi trường.');
+        setLoading(false);
+        return;
+      }
+
+      // Map username to internal auth email
+      const internalEmail = cleanUsername.includes('@')
+        ? cleanUsername
+        : `${cleanUsername}@quan.local`;
+
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: internalEmail,
+          password,
+        });
+
+      if (authError || !authData.user) {
+        setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
+        setLoading(false);
+        return;
+      }
+
+      // Verify profile and active status
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        setErrorMessage('Không tìm thấy hồ sơ nhân sự liên kết với tài khoản này.');
+        setLoading(false);
+        return;
+      }
+
+      if (profile.is_active === false) {
+        await supabase.auth.signOut();
+        setErrorMessage('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ chủ quán.');
+        setLoading(false);
+        return;
+      }
+
+      const role = profile.role as UserRole;
+      const target = redirectTarget || getDefaultRedirectForRole(role);
+      router.push(target);
+      router.refresh();
+    } catch (err: unknown) {
+      console.error('Login error:', err);
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định khi đăng nhập.'
+      );
+      setLoading(false);
+    }
   };
 
   return (
@@ -46,6 +112,7 @@ export default function LoginPage() {
               fill
               sizes="64px"
               className="object-cover"
+              priority
             />
           </div>
           <div>
@@ -53,66 +120,46 @@ export default function LoginPage() {
               {STORE_NAME}
             </h1>
             <p className="text-xs text-moss font-semibold uppercase tracking-wider mt-0.5">
-              Hệ thống Quản lý Quầy & Gọi món
+              Hệ thống Vận hành Quầy & Điểm danh
             </p>
           </div>
         </div>
 
-        {/* Quick 1-Click Access for Demo / Testing */}
-        <div className="bg-kraft-soft border border-brass/30 rounded-2xl p-4 space-y-3">
-          <p className="text-xs font-bold text-pine uppercase tracking-wide flex items-center gap-1.5">
-            <UserCheck className="w-4 h-4 text-moss" />
-            <span>Đăng nhập nhanh 1 chạm:</span>
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => handleDemoLogin('staff')}
-              disabled={loading}
-              className="py-2.5 px-3 rounded-xl bg-pine hover:bg-pine/90 text-kraft text-xs font-bold transition flex items-center justify-center gap-1.5 tap-active shadow-sm"
-            >
-              <Coffee className="w-3.5 h-3.5" />
-              <span>Vào Quầy (Staff)</span>
-            </button>
-            <button
-              onClick={() => handleDemoLogin('admin')}
-              disabled={loading}
-              className="py-2.5 px-3 rounded-xl bg-moss hover:bg-moss/90 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 tap-active shadow-sm"
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Vào Quản Trị (Admin)</span>
-            </button>
+        {/* Error Alert */}
+        {errorMessage && (
+          <div className="p-3.5 rounded-xl bg-clay/10 border border-clay/30 flex items-start gap-2.5 text-xs text-clay">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
           </div>
-        </div>
-
-        <div className="relative flex items-center justify-center">
-          <div className="border-t border-brass/20 w-full" />
-          <span className="bg-kraft-card px-3 text-[11px] text-pine-2 font-medium">
-            Hoặc nhập tài khoản
-          </span>
-          <div className="border-t border-brass/20 w-full" />
-        </div>
+        )}
 
         {/* Login Form */}
-        <form onSubmit={handleFormSubmit} className="space-y-3.5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-pine mb-1">
-              Email hoặc Số điện thoại
+            <label className="block text-xs font-bold text-pine mb-1.5 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-moss" />
+              <span>Tên đăng nhập</span>
             </label>
             <input
               type="text"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nhanvien@chile.vn hoặc 0333859626"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-brass/40 bg-kraft focus:outline-none focus:ring-2 focus:ring-moss text-pine text-sm placeholder:text-pine-2/50"
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="admin, thu_ngan, pha_che..."
+              className="w-full px-3.5 py-2.5 rounded-xl border border-brass/40 bg-kraft focus:outline-none focus:ring-2 focus:ring-moss text-pine text-sm placeholder:text-pine-2/50 font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-pine mb-1">
-              Mật khẩu
+            <label className="block text-xs font-bold text-pine mb-1.5 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-moss" />
+              <span>Mật khẩu</span>
             </label>
             <input
               type="password"
+              autoComplete="current-password"
+              required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -123,18 +170,18 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-pine text-kraft rounded-xl font-serif font-bold text-sm shadow hover:bg-pine/90 transition flex items-center justify-center gap-2 tap-active disabled:opacity-50"
+            className="w-full py-3 bg-pine text-kraft rounded-xl font-serif font-bold text-sm shadow hover:bg-pine/90 transition flex items-center justify-center gap-2 tap-active disabled:opacity-50 mt-2"
           >
             <Lock className="w-4 h-4" />
-            <span>{loading ? 'Đang xác thực...' : 'Đăng nhập'}</span>
+            <span>{loading ? 'Đang xác thực...' : 'Đăng nhập vào hệ thống'}</span>
           </button>
         </form>
 
-        {/* Return to Customer page */}
-        <div className="text-center pt-2">
+        {/* Back to Home Link */}
+        <div className="text-center pt-2 border-t border-brass/20">
           <Link
             href="/"
-            className="inline-flex items-center gap-1 text-xs text-pine-2 hover:text-pine font-semibold transition"
+            className="inline-flex items-center gap-1.5 text-xs text-pine-2 hover:text-pine font-semibold transition"
           >
             <span>Quay lại trang chủ quán</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -142,5 +189,19 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-kraft flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-moss border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import { QrCode, UtensilsCrossed, Users, ArrowLeft } from 'lucide-react';
+import { QrCode, UtensilsCrossed, Users, ArrowLeft, CalendarCheck2 } from 'lucide-react';
 
 export default function AdminLayout({
   children,
@@ -24,6 +24,11 @@ export default function AdminLayout({
       icon: UtensilsCrossed,
     },
     {
+      label: 'Chấm Công & Giờ Làm',
+      href: '/admin/attendance/today',
+      icon: CalendarCheck2,
+    },
+    {
       label: 'Tài Khoản Nhân Viên',
       href: '/admin/staff',
       icon: Users,
@@ -35,7 +40,7 @@ export default function AdminLayout({
       <Navbar role="admin" />
 
       {/* Admin Subheader & Tab Navigation */}
-      <div className="bg-kraft-card border-b border-brass/20">
+      <div className="bg-kraft-card border-b border-brass/20 sticky top-16 z-30">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Link
@@ -54,7 +59,7 @@ export default function AdminLayout({
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
             {tabs.map((tab) => {
               const Icon = tab.icon;
-              const isActive = pathname === tab.href;
+              const isActive = pathname === tab.href || pathname.startsWith(tab.href.split('/today')[0]);
               return (
                 <Link
                   key={tab.href}

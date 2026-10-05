@@ -4,17 +4,19 @@ import { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Table } from '@/types';
 import { STORE_NAME } from '@/lib/constants';
-import { Download, ExternalLink } from 'lucide-react';
+import { Download, ExternalLink, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 interface QRCardProps {
   table: Table;
   baseUrl?: string;
+  onRegenerateToken?: (tableId: string) => void;
 }
 
-export default function QRCard({ table, baseUrl = '' }: QRCardProps) {
+export default function QRCard({ table, baseUrl = '', onRegenerateToken }: QRCardProps) {
   const qrRef = useRef<HTMLDivElement>(null);
   const [origin, setOrigin] = useState(baseUrl);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -22,10 +24,23 @@ export default function QRCard({ table, baseUrl = '' }: QRCardProps) {
     }
   }, []);
 
-  // Đảm bảo mã QR luôn là đường link đầy đủ có http/https để máy ảnh điện thoại và Zalo tự động nhận diện là liên kết
+  // Đường link mã QR trỏ tới token bảo mật ngẫu nhiên của bàn
+  const orderIdentifier = table.qr_token || table.slug;
   const fullOrderUrl = origin 
-    ? `${origin}/order/${table.slug}`
-    : `https://chilexaiginhorder.vercel.app/order/${table.slug}`;
+    ? `${origin}/order/${orderIdentifier}`
+    : `https://chilexaiginhorder.vercel.app/order/${orderIdentifier}`;
+
+  const handleRegenerate = async () => {
+    if (!onRegenerateToken) return;
+    if (confirm(`Bạn có chắc muốn đổi mã QR cho "${table.name}"? Mã QR cũ đã in sẽ không còn dùng được nữa.`)) {
+      setIsRegenerating(true);
+      try {
+        await onRegenerateToken(table.id);
+      } finally {
+        setIsRegenerating(false);
+      }
+    }
+  };
 
   const downloadQR = () => {
     if (!qrRef.current) return;
@@ -114,27 +129,38 @@ export default function QRCard({ table, baseUrl = '' }: QRCardProps) {
         />
       </div>
 
-      <p className="text-[11px] text-pine-2 font-mono mt-1 break-all px-2 line-clamp-1" title={fullOrderUrl}>
+      <p className="text-[10px] text-pine-2 font-mono mt-1 break-all px-2 line-clamp-1" title={fullOrderUrl}>
         {fullOrderUrl}
       </p>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 mt-4 w-full print:hidden">
+      <div className="flex items-center gap-1.5 mt-4 w-full print:hidden">
         <button
           onClick={downloadQR}
-          className="flex-1 py-2 bg-brass hover:bg-brass-soft text-pine font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm tap-active"
+          className="flex-1 py-2 bg-brass hover:bg-brass-soft text-pine font-bold text-xs rounded-lg transition flex items-center justify-center gap-1 shadow-sm tap-active"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>Tải ảnh in</span>
+          <span>Tải in</span>
         </button>
 
+        {onRegenerateToken && (
+          <button
+            onClick={handleRegenerate}
+            disabled={isRegenerating}
+            className="p-2 border border-brass/50 hover:bg-kraft text-pine rounded-lg transition tap-active disabled:opacity-50"
+            title="Đổi mã QR mới (bảo mật)"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+          </button>
+        )}
+
         <Link
-          href={`/order/${table.slug}`}
+          href={`/order/${orderIdentifier}`}
           target="_blank"
           className="p-2 border border-brass/50 hover:bg-kraft text-pine rounded-lg transition"
-          title="Mở thử menu bàn này"
+          title="Mở menu bàn này"
         >
-          <ExternalLink className="w-4 h-4" />
+          <ExternalLink className="w-3.5 h-3.5" />
         </Link>
       </div>
     </div>
