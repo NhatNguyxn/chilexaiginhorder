@@ -48,8 +48,11 @@ class MockStore {
     }
   }
 
+  public realtimeStatus: 'connected' | 'connecting' | 'error' | 'disconnected' = 'disconnected';
+
   private initSupabaseRealtime() {
     if (!supabase) return;
+    this.realtimeStatus = 'connecting';
 
     try {
       this.supabaseChannel = supabase.channel('chile_global_orders', {
@@ -74,10 +77,24 @@ class MockStore {
         })
         .subscribe((status) => {
           console.log('[Supabase Realtime] Trạng thái kết nối kênh toàn cầu:', status);
+          if (status === 'SUBSCRIBED') {
+            this.realtimeStatus = 'connected';
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            this.realtimeStatus = 'error';
+          } else {
+            this.realtimeStatus = 'connecting';
+          }
+          this.notifyListeners();
         });
     } catch (err) {
       console.warn('Lỗi khởi tạo Supabase Realtime channel', err);
+      this.realtimeStatus = 'error';
     }
+  }
+
+  public getRealtimeStatus(): 'connected' | 'connecting' | 'error' | 'disconnected' {
+    if (!supabase) return 'disconnected';
+    return this.realtimeStatus;
   }
 
   private handleRemoteNewOrder(order: Order, session?: TableSession) {

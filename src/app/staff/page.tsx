@@ -30,6 +30,7 @@ export default function StaffDashboard() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'new' | 'preparing' | 'served'>('all');
   const [viewMode, setViewMode] = useState<'feed' | 'tables'>('tables');
+  const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'error' | 'disconnected'>('disconnected');
   
   // Checkout Modal state
   const [selectedTableForCheckout, setSelectedTableForCheckout] = useState<Table | null>(null);
@@ -45,6 +46,7 @@ export default function StaffDashboard() {
     setOrders([...o].reverse()); // newest first
     setTables(t);
     setSessions(s);
+    setRealtimeStatus(mockStore.getRealtimeStatus());
   }, []);
 
   useEffect(() => {
@@ -157,10 +159,20 @@ export default function StaffDashboard() {
               Theo dõi đơn đặt món tại bàn theo thời gian thực và quản lý thu tiền bàn.
             </p>
             <div className="mt-2 flex items-center gap-2">
-              {isSupabaseConfigured ? (
+              {realtimeStatus === 'connected' ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-moss/20 text-moss border border-moss/30">
                   <span className="w-2 h-2 rounded-full bg-moss animate-pulse" />
-                  Đã kết nối Cloud Realtime (Nhận đơn tức thì từ điện thoại)
+                  Đã kết nối Cloud Realtime (Sẵn sàng nhận đơn từ mọi điện thoại)
+                </span>
+              ) : realtimeStatus === 'error' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-600/15 text-red-700 border border-red-500/30" title="Địa chỉ Supabase URL bị sai hoặc không kết nối được">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  Lỗi kết nối Supabase (Địa chỉ URL Supabase bị sai, cần kiểm tra lại)
+                </span>
+              ) : realtimeStatus === 'connecting' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-800 border border-amber-500/30">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  Đang kết nối Realtime...
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-clay/15 text-clay border border-clay/30" title="Chưa nhận được biến Supabase trên Vercel. Cần Save biến và bấm Redeploy trên Vercel.">
