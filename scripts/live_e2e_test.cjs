@@ -250,7 +250,7 @@ async function runLiveE2ETest() {
     throw new Error(`Chủ quán lấy danh sách chấm công thất bại: ${JSON.stringify(adminAttendanceRes.data)}`);
   }
   console.log(`  ✅ Chủ quán xem được ${adminAttendanceRes.data.records.length} bản ghi chấm công hôm nay!`);
-  const myStaffRecord = adminAttendanceRes.data.records.find((r) => r.user_id === newStaff.id);
+  const myStaffRecord = adminAttendanceRes.data.records.find((r) => r.user_id === testStaffId);
   if (myStaffRecord) {
     console.log(`  🎉 ĐÃ TÌM THẤY BẢN GHI CỦA NHÂN VIÊN VỪA TẠO TRÊN GIAO DIỆN CHỦ QUÁN!`);
     console.log(`  Nhân viên: ${myStaffRecord.user?.full_name || myStaffRecord.user_id}`);
