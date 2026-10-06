@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 const DEFAULT_SETTINGS: StoreSettings = {
-  id: 's0000000-0000-0000-0000-000000000001',
+  id: 'a0000000-0000-0000-0000-000000000001',
   store_name: 'Chị Lệ xai gính',
   address: 'Khu phố ẩm thực Hoàng Su Phì, Tỉnh Hà Giang',
   latitude: 22.753333,

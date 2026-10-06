@@ -7,6 +7,22 @@
 -- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- DỌN DẸP BẢNG CŨ (Nếu database đã có các bảng thử nghiệm cũ từ schema.sql)
+DROP TABLE IF EXISTS push_subscriptions CASCADE;
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS order_items CASCADE;
+DROP TABLE IF EXISTS orders CASCADE;
+DROP TABLE IF EXISTS menu_items CASCADE;
+DROP TABLE IF EXISTS menu_categories CASCADE;
+DROP TABLE IF EXISTS table_sessions CASCADE;
+DROP TABLE IF EXISTS tables CASCADE;
+DROP TABLE IF EXISTS staff_users CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
+DROP FUNCTION IF EXISTS is_owner() CASCADE;
+DROP FUNCTION IF EXISTS is_manager_or_owner() CASCADE;
+DROP FUNCTION IF EXISTS is_active_staff() CASCADE;
+DROP FUNCTION IF EXISTS get_current_role() CASCADE;
+
 -- 2. BẢNG HỒ SƠ TÀI KHOẢN (PROFILES)
 -- Thay thế staff_users cũ, liên kết trực tiếp với auth.users
 CREATE TABLE IF NOT EXISTS profiles (

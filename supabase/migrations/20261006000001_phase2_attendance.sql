@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS store_settings (
 -- Khởi tạo bản ghi cấu hình mặc định duy nhất nếu chưa có
 INSERT INTO store_settings (id, store_name, address, latitude, longitude, radius_meters, warning_mode)
 VALUES (
-  's0000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
   'Chị Lệ xai gính',
   'Khu phố ẩm thực Hoàng Su Phì, Tỉnh Hà Giang',
   22.753333,
