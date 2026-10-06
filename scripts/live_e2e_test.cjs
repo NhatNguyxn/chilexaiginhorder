@@ -35,11 +35,12 @@ async function runLiveE2ETest() {
     const setCookieHeaders = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
     const newCookies = setCookieHeaders.map((c) => c.split(';')[0]).join('; ');
 
+    const text = await res.text();
     let data;
     try {
-      data = await res.json();
+      data = JSON.parse(text);
     } catch {
-      data = { rawText: await res.text() };
+      data = { rawText: text };
     }
 
     return { status: res.status, ok: res.ok, data, newCookies };
@@ -226,9 +227,18 @@ async function runLiveE2ETest() {
   // --- BƯỚC 8: CHỦ QUÁN XUẤT BẢNG CÔNG ---
   console.log('\n📌 BƯỚC 8: Chủ quán đối soát & xem lịch sử bảng công...');
   const currentMonth = new Date().toISOString().slice(0, 7); // e.g. "2026-10"
-  const exportRes = await apiFetch(`/api/attendance/export?month=${currentMonth}`, {}, adminCookieHeader);
+  const exportRes = await apiFetch(`/api/attendance/export?format=csv&month=${currentMonth}`, {}, adminCookieHeader);
   if (exportRes.ok) {
-    console.log('  ✅ Xuất bảng công tháng OK, tổng bản ghi:', exportRes.data.total_records || exportRes.data.records?.length || 0);
+    if (typeof exportRes.data === 'string') {
+      const lines = exportRes.data.trim().split('\n');
+      console.log(`  ✅ Xuất bảng công CSV tháng ${currentMonth} thành công! Số dòng: ${lines.length}`);
+      console.log('  Tiêu đề CSV:', lines[0]);
+      if (lines.length > 1) {
+        console.log('  Dòng dữ liệu mẫu:', lines[1]);
+      }
+    } else {
+      console.log('  ✅ Xuất bảng công tháng OK:', exportRes.data);
+    }
   } else {
     console.log('  ℹ️ Xuất bảng công trả về:', exportRes.status, exportRes.data);
   }
