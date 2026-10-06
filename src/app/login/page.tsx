@@ -38,63 +38,44 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      if (!isSupabaseConfigured || !supabase) {
-        // Fallback for local preview if Supabase keys are not yet filled
-        if (cleanUsername === 'admin' || cleanUsername === 'staff') {
-          router.push(cleanUsername === 'admin' ? '/admin/tables' : '/staff');
-          return;
+      // 1. Call server-side authentication route
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUsername, password }),
+      });
+
+      const resData = await response.json();
+
+      if (!response.ok || !resData.success) {
+        setErrorMessage(
+          resData.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+        );
+        setLoading(false);
+        return;
+      }
+
+      // 2. Synchronize client-side Supabase session if browser client exists
+      if (resData.session && supabase) {
+        try {
+          await supabase.auth.setSession({
+            access_token: resData.session.access_token,
+            refresh_token: resData.session.refresh_token,
+          });
+        } catch (syncErr) {
+          console.warn('[Login Page] Client session sync warning:', syncErr);
         }
-        setErrorMessage('Hệ thống Supabase chưa được cấu hình biến môi trường.');
-        setLoading(false);
-        return;
       }
 
-      // Map username to internal auth email
-      const internalEmail = cleanUsername.includes('@')
-        ? cleanUsername
-        : `${cleanUsername}@quan.local`;
-
-      const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
-          email: internalEmail,
-          password,
-        });
-
-      if (authError || !authData.user) {
-        setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
-        setLoading(false);
-        return;
-      }
-
-      // Verify profile and active status
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .is('deleted_at', null)
-        .maybeSingle();
-
-      if (profileError || !profile) {
-        setErrorMessage('Không tìm thấy hồ sơ nhân sự liên kết với tài khoản này.');
-        setLoading(false);
-        return;
-      }
-
-      if (profile.is_active === false) {
-        await supabase.auth.signOut();
-        setErrorMessage('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ chủ quán.');
-        setLoading(false);
-        return;
-      }
-
-      const role = profile.role as UserRole;
-      const target = redirectTarget || getDefaultRedirectForRole(role);
-      router.push(target);
-      router.refresh();
+      // 3. Navigate to target dashboard with hard reload to apply session cookies
+      const target = redirectTarget || resData.redirect || '/admin/tables';
+      window.location.href = target;
     } catch (err: unknown) {
       console.error('Login error:', err);
       setErrorMessage(
-        err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định khi đăng nhập.'
+        err instanceof Error
+          ? err.message
+          : 'Không thể kết nối đến máy chủ xác thực. Vui lòng thử lại.'
       );
       setLoading(false);
     }
