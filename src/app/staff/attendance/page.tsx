@@ -17,12 +17,14 @@ import {
   HelpCircle,
   FileEdit,
   Send,
-  X
+  X,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function StaffAttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
   // Shifts state
@@ -42,8 +44,9 @@ export default function StaffAttendancePage() {
   const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState<number>(0);
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [currentDateDisplay, setCurrentDateDisplay] = useState<string>('');
-  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [isLocatingGps, setIsLocatingGps] = useState(false);
 
   // Consent Modal state
   const [hasConsent, setHasConsent] = useState<boolean>(true);
@@ -84,26 +87,55 @@ export default function StaffAttendancePage() {
     }
   };
 
-  // Request GPS Location
+  // Request Real Live GPS Location with Satellite & Cellular Fallback
   const requestGps = () => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) {
       setGpsError('Thiết bị không hỗ trợ định vị GPS');
       return;
     }
 
+    setIsLocatingGps(true);
+    setGpsError(null);
+
+    // 1. Try High Accuracy (GPS Satellites) first
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGpsCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
+          lat: Number(pos.coords.latitude.toFixed(6)),
+          lng: Number(pos.coords.longitude.toFixed(6)),
+          accuracy: Math.round(pos.coords.accuracy),
         });
+        setIsLocatingGps(false);
         setGpsError(null);
       },
       (err) => {
-        console.warn('Geolocation error:', err.message);
-        setGpsError('GPS: Không khả dụng (bị từ chối hoặc lỗi)');
+        console.warn('[GPS] High accuracy lock timed out or failed, trying fallback:', err);
+        // 2. Fallback to standard accuracy (Cellular / Wi-Fi)
+        navigator.geolocation.getCurrentPosition(
+          (fallbackPos) => {
+            setGpsCoords({
+              lat: Number(fallbackPos.coords.latitude.toFixed(6)),
+              lng: Number(fallbackPos.coords.longitude.toFixed(6)),
+              accuracy: Math.round(fallbackPos.coords.accuracy),
+            });
+            setIsLocatingGps(false);
+            setGpsError(null);
+          },
+          (fallbackErr) => {
+            console.warn('[GPS] Fallback failed:', fallbackErr);
+            setIsLocatingGps(false);
+            if (fallbackErr.code === 1) {
+              setGpsError('Quyền GPS bị từ chối. Hãy bật Vị trí trong Cài đặt trình duyệt.');
+            } else if (fallbackErr.code === 2) {
+              setGpsError('Không tìm thấy GPS. Hãy bật Định vị (Location) trên điện thoại.');
+            } else {
+              setGpsError('GPS tạm thời chưa phản hồi. Nhấn "Lấy lại GPS".');
+            }
+          },
+          { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
     );
   };
 
@@ -158,24 +190,91 @@ export default function StaffAttendancePage() {
     return () => clearInterval(interval);
   }, [serverTimeOffsetMs]);
 
-  // Start Camera
+  // Helper to draw the official 3-line stamped watermark directly into canvas pixels
+  const drawWatermarkOnContext = (
+    ctx: CanvasRenderingContext2D,
+    targetWidth: number,
+    targetHeight: number
+  ) => {
+    const now = new Date(Date.now() + serverTimeOffsetMs);
+    const { timeStr, dateStr } = formatVietnameseDateTime(now);
+    const storeName = settings?.store_name || 'Chị Lệ xai gính';
+    const gpsText = gpsCoords
+      ? `${storeName} • GPS: ${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}${
+          gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''
+        }`
+      : `${storeName} • ${gpsError || 'GPS: Đang xác định'}`;
+
+    // Responsive typography based on image width
+    const fontSizeTime = Math.max(26, Math.round(targetWidth * 0.046));
+    const fontSizeDate = Math.max(16, Math.round(targetWidth * 0.026));
+    const fontSizeGps = Math.max(12, Math.round(targetWidth * 0.022));
+
+    const paddingX = Math.round(targetWidth * 0.035);
+    const paddingY = Math.round(targetWidth * 0.03);
+    const boxHeight = fontSizeTime + fontSizeDate + fontSizeGps + paddingY * 2 + 16;
+    const boxWidth = Math.round(targetWidth * 0.92);
+    const boxX = Math.round(targetWidth * 0.04);
+    const boxY = targetHeight - boxHeight - Math.round(targetHeight * 0.04);
+
+    // 1. Dark frosted badge background
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 18, 0.85)';
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 16);
+    ctx.fill();
+
+    // 2. Brass accent outline
+    ctx.strokeStyle = 'rgba(173, 139, 82, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 3. Stamped text with high-contrast shadow
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+
+    // Line 1: Time HH:mm:ss
+    ctx.font = `bold ${fontSizeTime}px sans-serif`;
+    const textY1 = boxY + paddingY + fontSizeTime - 2;
+    ctx.fillText(timeStr, boxX + paddingX, textY1);
+
+    // Line 2: Vietnamese Date
+    ctx.font = `600 ${fontSizeDate}px sans-serif`;
+    const textY2 = textY1 + fontSizeDate + 8;
+    ctx.fillText(dateStr, boxX + paddingX, textY2);
+
+    // Line 3: Location + Real GPS
+    ctx.fillStyle = '#E2E8F0';
+    ctx.font = `500 ${fontSizeGps}px sans-serif`;
+    const textY3 = textY2 + fontSizeGps + 6;
+    ctx.fillText(gpsText, boxX + paddingX, textY3);
+
+    ctx.restore();
+  };
+
+  // Start Camera with Mobile Portrait constraints
   const startCamera = async (type: AttendanceCheckType) => {
     setActiveCheckType(type);
     setCapturedImageBase64(null);
     setCameraError(null);
+    setCameraActive(true);
     requestGps();
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Trình duyệt của bạn không hỗ trợ mở camera trực tiếp.');
+      setCameraError('Trình duyệt không hỗ trợ mở camera trực tiếp. Vui lòng bấm vào "Mở Camera gốc của điện thoại".');
       return;
     }
 
     try {
+      // Request Portrait ratio suitable for vertical mobile phones
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'user', // Selfie camera for attendance
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          facingMode: { ideal: 'user' },
+          width: { ideal: 1080 },
+          height: { ideal: 1440 },
         },
         audio: false,
       });
@@ -183,20 +282,19 @@ export default function StaffAttendancePage() {
       mediaStreamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.play().catch((playErr) => {
+          console.warn('Video play warning:', playErr);
+        });
       }
-      setCameraActive(true);
     } catch (err: unknown) {
       console.error('Camera access error:', err);
       const errorStr = String(err);
       if (errorStr.includes('NotAllowedError') || errorStr.includes('Permission denied')) {
         setCameraError(
-          'Quyền truy cập Camera bị từ chối. Vui lòng nhấn vào biểu tượng ổ khóa trên thanh địa chỉ trình duyệt và cho phép Camera để chấm công.'
+          'Quyền Camera bị từ chối. Vui lòng cho phép Camera trên thanh địa chỉ, hoặc bấm nút mở Camera gốc của điện thoại.'
         );
-      } else if (errorStr.includes('NotFoundError') || errorStr.includes('DevicesNotFoundError')) {
-        setCameraError('Không tìm thấy thiết bị camera trên máy này.');
       } else {
-        setCameraError('Không thể khởi động camera. Vui lòng kiểm tra quyền và tải lại trang.');
+        setCameraError('Không thể mở camera trình duyệt. Bạn có thể sử dụng nút "Mở Camera gốc của điện thoại" bên dưới.');
       }
     }
   };
@@ -210,18 +308,22 @@ export default function StaffAttendancePage() {
     setCameraActive(false);
   };
 
-  // Capture Photo and Draw Inset Pixel Watermark
+  // Capture Photo from Live Video with Mirror Correction & Watermark
   const capturePhotoWithWatermark = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Get video dimensions
-    const width = video.videoWidth || 640;
-    const height = video.videoHeight || 480;
+    // Check if camera has actually rendered a frame to prevent black image
+    if (video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) {
+      alert('Camera đang khởi động hoặc lấy nét, vui lòng chờ 1-2 giây rồi bấm chụp lại!');
+      return;
+    }
 
-    // Resize max dimension to 1024px for compression
-    const maxDim = 1024;
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+
+    const maxDim = 1280;
     let targetWidth = width;
     let targetHeight = height;
 
@@ -240,73 +342,70 @@ export default function StaffAttendancePage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 1. Draw camera video frame
-    ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
-
-    // 2. Prepare Watermark Content
-    const now = new Date(Date.now() + serverTimeOffsetMs);
-    const { timeStr, dateStr } = formatVietnameseDateTime(now);
-    const storeName = settings?.store_name || 'Chị Lệ xai gính';
-    const gpsText = gpsCoords
-      ? `${storeName} • GPS: ${formatCoordinates(gpsCoords.lat, gpsCoords.lng)}`
-      : `${storeName} • ${gpsError || 'GPS: Không khả dụng'}`;
-
-    // Dynamic sizing based on canvas width
-    const fontSizeTime = Math.max(26, Math.round(targetWidth * 0.048));
-    const fontSizeDate = Math.max(16, Math.round(targetWidth * 0.026));
-    const fontSizeGps = Math.max(13, Math.round(targetWidth * 0.022));
-
-    const paddingX = Math.round(targetWidth * 0.03);
-    const paddingY = Math.round(targetWidth * 0.025);
-    const boxHeight = fontSizeTime + fontSizeDate + fontSizeGps + paddingY * 2 + 16;
-    const boxWidth = Math.round(targetWidth * 0.88);
-    const boxX = Math.round(targetWidth * 0.04);
-    const boxY = targetHeight - boxHeight - Math.round(targetWidth * 0.04);
-
-    // 3. Draw dark badge overlay
+    // 1. Draw camera video frame with mirror correction (so natural selfie matches mirror preview)
     ctx.save();
-    ctx.fillStyle = 'rgba(15, 23, 18, 0.75)';
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 14);
-    ctx.fill();
-
-    // Subtle golden brass border on watermark badge
-    ctx.strokeStyle = 'rgba(173, 139, 82, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // 4. Render Text Lines with crisp white color & contrast shadow
-    ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-
-    // Line 1: Time HH:mm:ss
-    ctx.font = `bold ${fontSizeTime}px sans-serif`;
-    const textY1 = boxY + paddingY + fontSizeTime - 2;
-    ctx.fillText(timeStr, boxX + paddingX, textY1);
-
-    // Line 2: Vietnamese Date
-    ctx.font = `600 ${fontSizeDate}px sans-serif`;
-    const textY2 = textY1 + fontSizeDate + 8;
-    ctx.fillText(dateStr, boxX + paddingX, textY2);
-
-    // Line 3: Location + GPS
-    ctx.fillStyle = '#E2E8F0';
-    ctx.font = `500 ${fontSizeGps}px sans-serif`;
-    const textY3 = textY2 + fontSizeGps + 6;
-    ctx.fillText(gpsText, boxX + paddingX, textY3);
-
+    ctx.translate(targetWidth, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
     ctx.restore();
 
-    // 5. Compress to JPEG (quality 0.75) ensuring < 250KB
-    const compressedJpeg = canvas.toDataURL('image/jpeg', 0.75);
+    // 2. Draw official watermark badge with real GPS
+    drawWatermarkOnContext(ctx, targetWidth, targetHeight);
+
+    // 3. Compress to JPEG (quality 0.8) ensuring < 250KB
+    const compressedJpeg = canvas.toDataURL('image/jpeg', 0.8);
     setCapturedImageBase64(compressedJpeg);
 
     // Stop camera feed once photo is captured
     stopCamera();
   };
+
+  // Fallback: Capture using Native Mobile Phone Camera App
+  const handleNativeCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const maxDim = 1280;
+        let targetWidth = img.naturalWidth || img.width;
+        let targetHeight = img.naturalHeight || img.height;
+
+        if (targetWidth > maxDim || targetHeight > maxDim) {
+          if (targetWidth > targetHeight) {
+            targetHeight = Math.round((targetHeight * maxDim) / targetWidth);
+            targetWidth = maxDim;
+          } else {
+            targetWidth = Math.round((targetWidth * maxDim) / targetHeight);
+            targetHeight = maxDim;
+          }
+        }
+
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Draw portrait image
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        // Draw official watermark badge with real GPS
+        drawWatermarkOnContext(ctx, targetWidth, targetHeight);
+
+        const compressedJpeg = canvas.toDataURL('image/jpeg', 0.8);
+        setCapturedImageBase64(compressedJpeg);
+        stopCamera();
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
 
   // Submit Attendance Record to Server
   const handleConfirmSubmit = async () => {
@@ -500,21 +599,41 @@ export default function StaffAttendancePage() {
             </button>
           </div>
 
-          <div className="pt-2 border-t border-brass/20 flex items-center justify-between text-xs text-pine-2">
-            <span className="flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-moss" />
-              <span>
-                {gpsCoords ? 'GPS: Đã nhận tọa độ' : gpsError || 'Đang lấy vị trí...'}
+          <div className="pt-3 border-t border-brass/20 flex flex-col gap-2 text-xs text-pine-2">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-left">
+                <MapPin className="w-4 h-4 text-moss flex-shrink-0" />
+                <span className="font-semibold text-pine">
+                  {gpsCoords
+                    ? `GPS: ${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}${
+                        gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''
+                      }`
+                    : gpsError || (isLocatingGps ? 'Đang dò tọa độ GPS thực...' : 'Chưa có vị trí GPS')}
+                </span>
               </span>
-            </span>
 
-            <button
-              onClick={() => setIsAdjustmentModalOpen(true)}
-              className="text-moss font-bold hover:underline flex items-center gap-1"
-            >
-              <FileEdit className="w-3.5 h-3.5" />
-              <span>Gửi sửa công</span>
-            </button>
+              <button
+                type="button"
+                onClick={requestGps}
+                disabled={isLocatingGps}
+                className="text-moss font-bold hover:underline flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-kraft tap-active"
+                title="Lấy lại tọa độ GPS thực"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin' : ''}`} />
+                <span>{isLocatingGps ? 'Đang lấy...' : 'Lấy lại GPS'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] text-pine-2/70">
+              <span>{settings?.store_name} ({settings?.radius_meters || 150}m)</span>
+              <button
+                onClick={() => setIsAdjustmentModalOpen(true)}
+                className="text-moss font-bold hover:underline flex items-center gap-1"
+              >
+                <FileEdit className="w-3.5 h-3.5" />
+                <span>Gửi sửa công</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -527,7 +646,7 @@ export default function StaffAttendancePage() {
               </span>
               <button
                 onClick={stopCamera}
-                className="p-2 rounded-full bg-kraft-dark/30 hover:bg-kraft-dark/60"
+                className="p-2 rounded-full bg-kraft-dark/30 hover:bg-kraft-dark/60 tap-active"
               >
                 <X className="w-5 h-5 text-kraft" />
               </button>
@@ -536,38 +655,65 @@ export default function StaffAttendancePage() {
             {/* Video Viewfinder with Live Watermark Badge Overlay */}
             <div className="relative w-full max-w-md aspect-3/4 rounded-3xl overflow-hidden bg-black shadow-2xl border-2 border-brass/40 flex items-center justify-center">
               <video
-                ref={videoRef}
+                ref={(el) => {
+                  videoRef.current = el;
+                  if (el && mediaStreamRef.current && el.srcObject !== mediaStreamRef.current) {
+                    el.srcObject = mediaStreamRef.current;
+                    el.play().catch((err) => console.warn('Video play warning:', err));
+                  }
+                }}
                 playsInline
                 muted
                 autoPlay
-                className="w-full h-full object-cover mirror"
+                className="w-full h-full object-cover"
+                style={{ transform: 'scaleX(-1)' }}
               />
 
               {/* Viewfinder live clock watermark simulation */}
-              <div className="absolute bottom-4 left-4 right-4 bg-pine/75 backdrop-blur-sm border border-brass/40 rounded-2xl p-3 text-white pointer-events-none space-y-0.5">
+              <div className="absolute bottom-4 left-4 right-4 bg-pine/85 backdrop-blur-md border border-brass/40 rounded-2xl p-3 text-white pointer-events-none space-y-0.5 shadow-lg">
                 <div className="font-mono font-bold text-xl">{currentTimeDisplay}</div>
                 <div className="text-xs font-semibold text-kraft-dark">{currentDateDisplay}</div>
                 <div className="text-[11px] text-moss font-medium line-clamp-1">
-                  {settings?.store_name} • {gpsCoords ? formatCoordinates(gpsCoords.lat, gpsCoords.lng) : gpsError || 'GPS: Đang lấy...'}
+                  {settings?.store_name} • {gpsCoords ? `GPS: ${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}${gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''}` : gpsError || (isLocatingGps ? 'Đang dò GPS...' : 'GPS: Không khả dụng')}
                 </div>
               </div>
             </div>
 
-            {/* Shutter Button */}
-            <div className="w-full max-w-md flex items-center justify-center py-4">
+            {/* Shutter Button & Native Camera Switcher */}
+            <div className="w-full max-w-md flex flex-col items-center justify-center py-3">
               <button
                 onClick={capturePhotoWithWatermark}
-                className="w-20 h-20 rounded-full border-4 border-white bg-moss hover:bg-moss/90 flex items-center justify-center shadow-2xl tap-active transition"
+                className="w-20 h-20 rounded-full border-4 border-white bg-moss hover:bg-moss/90 flex items-center justify-center shadow-2xl tap-active transition active:scale-95"
                 title="Bấm chụp ảnh"
               >
                 <Camera className="w-8 h-8 text-white" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="mt-3 px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold backdrop-blur-sm border border-white/30 flex items-center gap-1.5 transition tap-active"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Mở Camera gốc của điện thoại (Nếu màn hình đen)</span>
               </button>
             </div>
           </div>
         )}
 
+        {/* Hidden File Input for Native Mobile Camera Fallback */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="user"
+          className="hidden"
+          onChange={handleNativeCameraCapture}
+        />
+
         {/* Hidden Canvas for Watermark Processing */}
         <canvas ref={canvasRef} className="hidden" />
+
 
         {/* Photo Preview & Confirm Modal */}
         {capturedImageBase64 && (
