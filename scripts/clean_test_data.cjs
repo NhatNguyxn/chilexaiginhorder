@@ -39,7 +39,15 @@ async function main() {
     },
   });
 
-  const cleanData = await cleanRes.json();
+  const cleanText = await cleanRes.text();
+  let cleanData;
+  try {
+    cleanData = JSON.parse(cleanText);
+  } catch {
+    console.error(`  ❌ Phản hồi từ server: HTTP ${cleanRes.status}:`, cleanText.slice(0, 500));
+    throw new Error(`Server trả về HTTP ${cleanRes.status} (không phải JSON)`);
+  }
+
   if (!cleanRes.ok || !cleanData.success) {
     throw new Error(`Dọn dẹp thất bại: ${JSON.stringify(cleanData)}`);
   }
