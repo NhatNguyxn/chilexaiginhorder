@@ -57,3 +57,59 @@ VALUES
   ('b0000000-0000-0000-0000-000000000009', 'Bàn 09', 'ban-09', 'tbl_tok_5c77bb09c6d246b8', true),
   ('b0000000-0000-0000-0000-000000000010', 'Bàn 10', 'ban-10', 'tbl_tok_0d99aa10e7b145c9', true)
 ON CONFLICT (slug) DO NOTHING;
+
+-- ==============================================================================
+-- 4. TẠO TÀI KHOẢN CHỦ QUÁN MẶC ĐỊNH (OWNER)
+-- Tên đăng nhập: 0333859626
+-- Mật khẩu: MebanManh@@@626
+-- ==============================================================================
+DO $$
+DECLARE
+  v_user_id UUID := gen_random_uuid();
+BEGIN
+  IF EXISTS (SELECT 1 FROM auth.users WHERE email = '0333859626@quan.local') THEN
+    SELECT id INTO v_user_id FROM auth.users WHERE email = '0333859626@quan.local';
+    UPDATE auth.users 
+    SET encrypted_password = crypt('MebanManh@@@626', gen_salt('bf')),
+        email_confirmed_at = NOW(),
+        updated_at = NOW()
+    WHERE id = v_user_id;
+  ELSE
+    INSERT INTO auth.users (
+      instance_id,
+      id,
+      aud,
+      role,
+      email,
+      encrypted_password,
+      email_confirmed_at,
+      raw_app_meta_data,
+      raw_user_meta_data,
+      created_at,
+      updated_at,
+      confirmation_token,
+      recovery_token
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      v_user_id,
+      'authenticated',
+      'authenticated',
+      '0333859626@quan.local',
+      crypt('MebanManh@@@626', gen_salt('bf')),
+      NOW(),
+      '{"provider": "email", "providers": ["email"]}'::jsonb,
+      '{"username": "0333859626", "full_name": "Admin (Chủ quán)"}'::jsonb,
+      NOW(),
+      NOW(),
+      '',
+      ''
+    );
+  END IF;
+
+  INSERT INTO public.profiles (id, username, full_name, role, is_active, hourly_rate)
+  VALUES (v_user_id, '0333859626', 'Admin (Chủ quán)', 'owner', true, 0)
+  ON CONFLICT (id) DO UPDATE SET 
+    role = 'owner', 
+    is_active = true,
+    full_name = 'Admin (Chủ quán)';
+END $$;
