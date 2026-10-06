@@ -158,10 +158,10 @@ export default function StaffAttendancePage() {
               setGpsError('GPS tạm thời chưa phản hồi. Nhấn "Lấy lại GPS".');
             }
           },
-          { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 }
+          { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
         );
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 4000, maximumAge: 60000 }
     );
   };
 
@@ -297,7 +297,9 @@ export default function StaffAttendancePage() {
     setCapturedImageBase64(null);
     setCameraError(null);
     setCameraActive(true);
-    requestGps();
+    if (!gpsCoords) {
+      requestGps();
+    }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCameraError('Trình duyệt không hỗ trợ mở camera trực tiếp. Vui lòng bấm vào "Mở Camera gốc của điện thoại".');
@@ -359,7 +361,7 @@ export default function StaffAttendancePage() {
     const width = video.videoWidth;
     const height = video.videoHeight;
 
-    const maxDim = 1280;
+    const maxDim = 720;
     let targetWidth = width;
     let targetHeight = height;
 
@@ -388,8 +390,8 @@ export default function StaffAttendancePage() {
     // 2. Draw official watermark badge with real GPS
     drawWatermarkOnContext(ctx, targetWidth, targetHeight);
 
-    // 3. Compress to JPEG (quality 0.8) ensuring < 250KB
-    const compressedJpeg = canvas.toDataURL('image/jpeg', 0.8);
+    // 3. Compress to lightweight JPEG (quality 0.68) for lightning-fast mobile upload (~40KB)
+    const compressedJpeg = canvas.toDataURL('image/jpeg', 0.68);
     setCapturedImageBase64(compressedJpeg);
 
     // Stop camera feed once photo is captured
@@ -408,7 +410,7 @@ export default function StaffAttendancePage() {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const maxDim = 1280;
+        const maxDim = 720;
         let targetWidth = img.naturalWidth || img.width;
         let targetHeight = img.naturalHeight || img.height;
 
@@ -433,7 +435,7 @@ export default function StaffAttendancePage() {
         // Draw official watermark badge with real GPS
         drawWatermarkOnContext(ctx, targetWidth, targetHeight);
 
-        const compressedJpeg = canvas.toDataURL('image/jpeg', 0.8);
+        const compressedJpeg = canvas.toDataURL('image/jpeg', 0.68);
         setCapturedImageBase64(compressedJpeg);
         stopCamera();
       };

@@ -96,6 +96,21 @@ export const attendanceService = {
   },
 
   async getAllTodayRecords(): Promise<AttendanceRecord[]> {
+    // 1. In browser, fetch via authenticated Admin Attendance API
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/admin/attendance?mode=today');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.records)) {
+            return data.records;
+          }
+        }
+      } catch (err) {
+        console.warn('[attendanceService.getAllTodayRecords] API fetch warning, trying direct DB:', err);
+      }
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfTodayIso = today.toISOString();
@@ -147,6 +162,30 @@ export const attendanceService = {
     limit?: number;
     offset?: number;
   }): Promise<{ records: AttendanceRecord[]; total: number }> {
+    // 1. In browser, fetch via authenticated Admin Attendance API
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams();
+        params.set('mode', 'history');
+        if (options?.userId) params.set('user_id', options.userId);
+        if (options?.status) params.set('status', options.status);
+        if (options?.startDate) params.set('start_date', options.startDate);
+        if (options?.endDate) params.set('end_date', options.endDate);
+        if (options?.limit) params.set('limit', String(options.limit));
+        if (options?.offset) params.set('offset', String(options.offset));
+
+        const res = await fetch(`/api/admin/attendance?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.records)) {
+            return { records: data.records, total: data.total ?? data.records.length };
+          }
+        }
+      } catch (err) {
+        console.warn('[attendanceService.getRecords] API fetch warning, trying direct DB:', err);
+      }
+    }
+
     const db = getAdminClient() || supabase;
     if (!isSupabaseConfigured || !db) {
       let filtered = [...localRecords];

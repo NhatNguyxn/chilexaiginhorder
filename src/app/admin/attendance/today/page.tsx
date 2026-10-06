@@ -117,6 +117,21 @@ export default function AttendanceTodayPage() {
       const todayDate = editingRecord.captured_at_server.split('T')[0];
       const newTimeIso = new Date(`${todayDate}T${editTimeStr}:00`).toISOString();
 
+      const patchRes = await fetch('/api/admin/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingRecord.id,
+          captured_at_server: newTimeIso,
+          note: `Đã chỉnh sửa giờ bởi Quản lý/Chủ quán: ${editReason.trim()}`,
+        }),
+      });
+
+      if (!patchRes.ok) {
+        const patchData = await patchRes.json();
+        throw new Error(patchData.error || 'Lỗi lưu bản ghi');
+      }
+
       await auditService.log({
         action: 'ATTENDANCE_TIME_EDIT',
         entity_type: 'attendance_records',
@@ -125,7 +140,7 @@ export default function AttendanceTodayPage() {
         new_data: { captured_at_server: newTimeIso, reason: editReason.trim() },
       });
 
-      alert('Đã cập nhật giờ chấm công và ghi nhận nhật ký kiểm toán!');
+      alert('Đã cập nhật giờ chấm công thành công!');
       setEditingRecord(null);
       setEditReason('');
       await loadData();
@@ -313,7 +328,7 @@ export default function AttendanceTodayPage() {
             <div className="relative rounded-2xl overflow-hidden border border-brass/30 bg-black aspect-3/4 max-h-[50vh]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={selectedRecord.photo_url}
+                src={selectedRecord.photo_url_signed || selectedRecord.photo_url}
                 alt="Ảnh chấm công đã đóng dấu"
                 className="w-full h-full object-contain"
               />

@@ -243,8 +243,54 @@ async function runLiveE2ETest() {
     console.log('  ℹ️ Xuất bảng công trả về:', exportRes.status, exportRes.data);
   }
 
+  // --- BƯỚC 9: CHỦ QUÁN XEM DANH SÁCH CHẤM CÔNG TRỰC TIẾP TRÊN TRANG QUẢN TRỊ ---
+  console.log('\n📌 BƯỚC 9: Chủ quán kiểm tra danh sách chấm công hôm nay (/api/admin/attendance)...');
+  const adminAttendanceRes = await apiFetch('/api/admin/attendance?mode=today', {}, adminCookieHeader);
+  if (!adminAttendanceRes.ok || !Array.isArray(adminAttendanceRes.data.records)) {
+    throw new Error(`Chủ quán lấy danh sách chấm công thất bại: ${JSON.stringify(adminAttendanceRes.data)}`);
+  }
+  console.log(`  ✅ Chủ quán xem được ${adminAttendanceRes.data.records.length} bản ghi chấm công hôm nay!`);
+  const myStaffRecord = adminAttendanceRes.data.records.find((r) => r.user_id === newStaff.id);
+  if (myStaffRecord) {
+    console.log(`  🎉 ĐÃ TÌM THẤY BẢN GHI CỦA NHÂN VIÊN VỪA TẠO TRÊN GIAO DIỆN CHỦ QUÁN!`);
+    console.log(`  Nhân viên: ${myStaffRecord.user?.full_name || myStaffRecord.user_id}`);
+    console.log(`  Loại: ${myStaffRecord.check_type}, Địa chỉ: ${myStaffRecord.location_name}`);
+    console.log(`  Link ảnh hiển thị: ${myStaffRecord.photo_url_signed ? 'Đầy đủ Signed URL bảo mật' : 'URL gốc'}`);
+  } else {
+    console.log('  ℹ️ Không tìm thấy bản ghi trực tiếp của nhân viên mới trong danh sách hôm nay.');
+  }
+
+  // --- BƯỚC 10: QUẢN LÝ BÀN - TẠO VÀ XÓA BÀN PHỤC VỤ ---
+  console.log('\n📌 BƯỚC 10: Chủ quán kiểm tra tạo và xóa bàn (/api/admin/tables)...');
+  const testTableName = `Bàn Test ${Date.now().toString(36).slice(-3)}`;
+  const createTableRes = await apiFetch(
+    '/api/admin/tables',
+    {
+      method: 'POST',
+      body: JSON.stringify({ name: testTableName }),
+    },
+    adminCookieHeader
+  );
+
+  if (!createTableRes.ok || !createTableRes.data.table) {
+    throw new Error(`Tạo bàn mới thất bại: ${JSON.stringify(createTableRes.data)}`);
+  }
+  const createdTable = createTableRes.data.table;
+  console.log(`  ✅ Tạo bàn mới thành công: "${createdTable.name}" (ID: ${createdTable.id}, Token: ${createdTable.qr_token})`);
+
+  // Xóa bàn vừa tạo
+  const deleteTableRes = await apiFetch(
+    `/api/admin/tables?id=${encodeURIComponent(createdTable.id)}`,
+    { method: 'DELETE' },
+    adminCookieHeader
+  );
+  if (!deleteTableRes.ok || !deleteTableRes.data.success) {
+    throw new Error(`Xóa bàn thất bại: ${JSON.stringify(deleteTableRes.data)}`);
+  }
+  console.log(`  🎉 XÓA BÀN THÀNH CÔNG RỰC RỠ! Thông báo: "${deleteTableRes.data.message}"`);
+
   console.log('\n================================================================');
-  console.log('🏆 TOÀN BỘ LUỒNG KIỂM THỬ THÀNH CÔNG 100%! HỆ THỐNG HOÀN HẢO!');
+  console.log('🏆 TOÀN BỘ 10 BƯỚC KIỂM THỬ THÀNH CÔNG 100%! HỆ THỐNG HOÀN HẢO!');
   console.log('================================================================');
 }
 

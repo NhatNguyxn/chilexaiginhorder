@@ -130,6 +130,7 @@ export interface AttendanceRecord {
   note?: string | null;
   created_at: string;
   user?: UserProfile;
+  photo_url_signed?: string;
 }
 
 export interface AttendanceAdjustment {

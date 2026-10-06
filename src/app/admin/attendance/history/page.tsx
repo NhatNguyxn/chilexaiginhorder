@@ -210,13 +210,13 @@ export default function AttendanceHistoryPage() {
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <button
-                            onClick={() => setZoomedPhotoUrl(r.photo_url)}
+                            onClick={() => setZoomedPhotoUrl(r.photo_url_signed || r.photo_url)}
                             className="w-12 h-14 rounded-lg overflow-hidden border border-brass/30 bg-black flex-shrink-0 group relative tap-active"
                             title="Bấm để xem ảnh to"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={r.photo_url}
+                              src={r.photo_url_signed || r.photo_url}
                               alt="Ảnh"
                               className="w-full h-full object-cover group-hover:scale-110 transition"
                             />
@@ -319,7 +319,7 @@ export default function AttendanceHistoryPage() {
                       {/* Action */}
                       <td className="py-3 px-4">
                         <button
-                          onClick={() => setZoomedPhotoUrl(r.photo_url)}
+                          onClick={() => setZoomedPhotoUrl(r.photo_url_signed || r.photo_url)}
                           className="px-2.5 py-1 rounded-lg bg-kraft hover:bg-kraft-dark text-pine font-semibold transition"
                         >
                           Xem ảnh

@@ -1,6 +1,7 @@
 import { Table } from '@/types';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
-import { INITIAL_TABLES } from '@/lib/constants';
+import { getAdminClient } from '@/lib/supabase/admin';
+import { SEED_TABLES } from '@/lib/services/bootstrap.service';
 
 function generateRandomToken(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -9,73 +10,117 @@ function generateRandomToken(): string {
   return 'tok_' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
 }
 
-// Fallback in-memory state for local testing when Supabase env is not configured
-let localTables: Table[] = INITIAL_TABLES.map((t) => ({
-  ...t,
-  qr_token: 'tbl_' + t.slug.replace('-', '_'),
-  is_active: true,
-}));
+// Fallback in-memory state
+let localTables: Table[] = SEED_TABLES.map((t) => ({ ...t }));
 
 export const tableService = {
   async getTables(): Promise<Table[]> {
-    if (!isSupabaseConfigured || !supabase) {
+    // 1. In browser, prefer server API for reliable auth & RLS bypass
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/admin/tables');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.tables) && data.tables.length > 0) {
+            return data.tables;
+          }
+        }
+      } catch (err) {
+        console.warn('[tableService.getTables] Fetch API warning, trying fallback:', err);
+      }
+    }
+
+    // 2. Server or direct Supabase client fallback
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       return [...localTables];
     }
 
-    const { data, error } = await supabase
-      .from('tables')
-      .select('*')
-      .is('deleted_at', null)
-      .order('name', { ascending: true });
+    try {
+      const { data, error } = await db
+        .from('tables')
+        .select('*')
+        .is('deleted_at', null)
+        .order('name', { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      if (error) console.warn('[tableService.getTables] Warning:', error.message);
+      if (error || !data || data.length === 0) {
+        if (error) console.warn('[tableService.getTables] Warning:', error.message);
+        return [...localTables];
+      }
+      return data;
+    } catch (err) {
+      console.warn('[tableService.getTables] Unexpected error:', err);
       return [...localTables];
     }
-    return data;
   },
 
   async getTableBySlug(slug: string): Promise<Table | null> {
-    if (!isSupabaseConfigured || !supabase) {
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       return localTables.find((t) => t.slug === slug && t.is_active !== false) || null;
     }
 
-    const { data, error } = await supabase
-      .from('tables')
-      .select('*')
-      .eq('slug', slug)
-      .is('deleted_at', null)
-      .maybeSingle();
+    try {
+      const { data, error } = await db
+        .from('tables')
+        .select('*')
+        .eq('slug', slug)
+        .is('deleted_at', null)
+        .maybeSingle();
 
-    if (error || !data) {
+      if (error || !data) {
+        return localTables.find((t) => t.slug === slug) || null;
+      }
+      return data;
+    } catch {
       return localTables.find((t) => t.slug === slug) || null;
     }
-    return data;
   },
 
   async getTableByToken(token: string): Promise<Table | null> {
-    if (!isSupabaseConfigured || !supabase) {
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       return localTables.find((t) => (t.qr_token === token || t.slug === token) && t.is_active !== false) || null;
     }
 
-    const { data, error } = await supabase
-      .from('tables')
-      .select('*')
-      .or(`qr_token.eq.${token},slug.eq.${token}`)
-      .is('deleted_at', null)
-      .maybeSingle();
+    try {
+      const { data, error } = await db
+        .from('tables')
+        .select('*')
+        .or(`qr_token.eq.${token},slug.eq.${token}`)
+        .is('deleted_at', null)
+        .maybeSingle();
 
-    if (error || !data) {
+      if (error || !data) {
+        return localTables.find((t) => (t.qr_token === token || t.slug === token)) || null;
+      }
+      return data;
+    } catch {
       return localTables.find((t) => (t.qr_token === token || t.slug === token)) || null;
     }
-    return data;
   },
 
   async createTable(name: string): Promise<Table> {
+    // 1. In browser, call dedicated server API route
+    if (typeof window !== 'undefined') {
+      const res = await fetch('/api/admin/tables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi tạo bàn');
+      }
+      return data.table;
+    }
+
+    // 2. Server fallback
     const slug = 'ban-' + Math.random().toString(36).substring(2, 7);
     const qr_token = generateRandomToken();
 
-    if (!isSupabaseConfigured || !supabase) {
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       const newTable: Table = {
         id: 'tbl-' + Date.now(),
         name,
@@ -87,7 +132,7 @@ export const tableService = {
       return newTable;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('tables')
       .insert({
         name,
@@ -105,9 +150,24 @@ export const tableService = {
   },
 
   async regenerateQrToken(id: string): Promise<string> {
-    const newToken = generateRandomToken();
+    // 1. In browser, call dedicated server API route
+    if (typeof window !== 'undefined') {
+      const res = await fetch('/api/admin/tables', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, regenerate_token: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi đổi mã QR');
+      }
+      return data.table?.qr_token || '';
+    }
 
-    if (!isSupabaseConfigured || !supabase) {
+    // 2. Server fallback
+    const newToken = generateRandomToken();
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       const idx = localTables.findIndex((t) => t.id === id);
       if (idx !== -1) {
         localTables[idx].qr_token = newToken;
@@ -115,7 +175,7 @@ export const tableService = {
       return newToken;
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('tables')
       .update({ qr_token: newToken })
       .eq('id', id);
@@ -127,19 +187,37 @@ export const tableService = {
   },
 
   async deleteTable(id: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
+    // 1. In browser, call dedicated server API route (handles UUID and legacy IDs cleanly)
+    if (typeof window !== 'undefined') {
+      const res = await fetch(`/api/admin/tables?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi xóa bàn');
+      }
+      return;
+    }
+
+    // 2. Server fallback
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       localTables = localTables.filter((t) => t.id !== id);
       return;
     }
 
-    // Soft delete
-    const { error } = await supabase
-      .from('tables')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (isUuid) {
+      const { error } = await db
+        .from('tables')
+        .update({ deleted_at: new Date().toISOString(), is_active: false })
+        .eq('id', id);
 
-    if (error) {
-      throw new Error(`Lỗi xóa bàn: ${error.message}`);
+      if (error) {
+        throw new Error(`Lỗi xóa bàn: ${error.message}`);
+      }
+    } else {
+      localTables = localTables.filter((t) => t.id !== id);
     }
   },
 };

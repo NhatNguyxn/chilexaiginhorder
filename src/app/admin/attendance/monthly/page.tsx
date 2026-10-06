@@ -304,7 +304,7 @@ export default function AttendanceMonthlyPage() {
                   <div className="flex items-center gap-2.5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={r.photo_url}
+                      src={r.photo_url_signed || r.photo_url}
                       alt="Ảnh"
                       className="w-10 h-12 rounded-lg object-cover border border-brass/30 bg-black flex-shrink-0"
                     />
