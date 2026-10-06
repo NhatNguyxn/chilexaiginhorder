@@ -47,6 +47,8 @@ export default function StaffAttendancePage() {
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isLocatingGps, setIsLocatingGps] = useState(false);
+  const [locationAddress, setLocationAddress] = useState<string | null>(null);
+  const [isResolvingAddress, setIsResolvingAddress] = useState(false);
 
   // Consent Modal state
   const [hasConsent, setHasConsent] = useState<boolean>(true);
@@ -87,6 +89,24 @@ export default function StaffAttendancePage() {
     }
   };
 
+  // Reverse geocode GPS coordinates to real Vietnamese address
+  const resolveAddressFromCoords = async (lat: number, lng: number) => {
+    setIsResolvingAddress(true);
+    try {
+      const res = await fetch(`/api/geo/reverse?lat=${lat}&lon=${lng}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.address) {
+          setLocationAddress(data.address);
+        }
+      }
+    } catch (err) {
+      console.warn('Lỗi giải mã địa chỉ thực:', err);
+    } finally {
+      setIsResolvingAddress(false);
+    }
+  };
+
   // Request Real Live GPS Location with Satellite & Cellular Fallback
   const requestGps = () => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) {
@@ -100,26 +120,32 @@ export default function StaffAttendancePage() {
     // 1. Try High Accuracy (GPS Satellites) first
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
         setGpsCoords({
-          lat: Number(pos.coords.latitude.toFixed(6)),
-          lng: Number(pos.coords.longitude.toFixed(6)),
+          lat,
+          lng,
           accuracy: Math.round(pos.coords.accuracy),
         });
         setIsLocatingGps(false);
         setGpsError(null);
+        resolveAddressFromCoords(lat, lng);
       },
       (err) => {
         console.warn('[GPS] High accuracy lock timed out or failed, trying fallback:', err);
         // 2. Fallback to standard accuracy (Cellular / Wi-Fi)
         navigator.geolocation.getCurrentPosition(
           (fallbackPos) => {
+            const lat = Number(fallbackPos.coords.latitude.toFixed(6));
+            const lng = Number(fallbackPos.coords.longitude.toFixed(6));
             setGpsCoords({
-              lat: Number(fallbackPos.coords.latitude.toFixed(6)),
-              lng: Number(fallbackPos.coords.longitude.toFixed(6)),
+              lat,
+              lng,
               accuracy: Math.round(fallbackPos.coords.accuracy),
             });
             setIsLocatingGps(false);
             setGpsError(null);
+            resolveAddressFromCoords(lat, lng);
           },
           (fallbackErr) => {
             console.warn('[GPS] Fallback failed:', fallbackErr);
@@ -199,11 +225,15 @@ export default function StaffAttendancePage() {
     const now = new Date(Date.now() + serverTimeOffsetMs);
     const { timeStr, dateStr } = formatVietnameseDateTime(now);
     const storeName = settings?.store_name || 'Chị Lệ xai gính';
-    const gpsText = gpsCoords
-      ? `${storeName} • GPS: ${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}${
+
+    // Line 3: Replace raw numbers with real human-readable location address
+    const locationText = locationAddress
+      ? `${storeName} • ${locationAddress}`
+      : gpsCoords
+      ? `${storeName} • Vị trí: ${gpsCoords.lat.toFixed(4)}, ${gpsCoords.lng.toFixed(4)}${
           gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''
         }`
-      : `${storeName} • ${gpsError || 'GPS: Đang xác định'}`;
+      : `${storeName} • ${gpsError || 'Đang xác định vị trí'}`;
 
     // Responsive typography based on image width
     const fontSizeTime = Math.max(26, Math.round(targetWidth * 0.046));
@@ -246,11 +276,17 @@ export default function StaffAttendancePage() {
     const textY2 = textY1 + fontSizeDate + 8;
     ctx.fillText(dateStr, boxX + paddingX, textY2);
 
-    // Line 3: Location + Real GPS
+    // Line 3: Real Human Location Address (Safely fit within badge width)
     ctx.fillStyle = '#E2E8F0';
     ctx.font = `500 ${fontSizeGps}px sans-serif`;
     const textY3 = textY2 + fontSizeGps + 6;
-    ctx.fillText(gpsText, boxX + paddingX, textY3);
+
+    const maxTextWidth = boxWidth - paddingX * 2;
+    let fittedText = locationText;
+    while (ctx.measureText(fittedText).width > maxTextWidth && fittedText.length > 12) {
+      fittedText = fittedText.slice(0, -4) + '...';
+    }
+    ctx.fillText(fittedText, boxX + paddingX, textY3);
 
     ctx.restore();
   };
@@ -431,6 +467,8 @@ export default function StaffAttendancePage() {
           photo_base64: capturedImageBase64,
           latitude: gpsCoords?.lat ?? null,
           longitude: gpsCoords?.lng ?? null,
+          location_address: locationAddress || undefined,
+          note: locationAddress ? `Vị trí: ${locationAddress}` : undefined,
           device_id: getDeviceId(),
         }),
       });
@@ -600,27 +638,41 @@ export default function StaffAttendancePage() {
           </div>
 
           <div className="pt-3 border-t border-brass/20 flex flex-col gap-2 text-xs text-pine-2">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-left">
-                <MapPin className="w-4 h-4 text-moss flex-shrink-0" />
-                <span className="font-semibold text-pine">
-                  {gpsCoords
-                    ? `GPS: ${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}${
-                        gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''
-                      }`
-                    : gpsError || (isLocatingGps ? 'Đang dò tọa độ GPS thực...' : 'Chưa có vị trí GPS')}
-                </span>
-              </span>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-1.5 text-left flex-1 min-w-0">
+                <MapPin className="w-4 h-4 text-moss flex-shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-pine text-xs break-words leading-snug">
+                    {locationAddress ? (
+                      <span>{locationAddress}</span>
+                    ) : isResolvingAddress ? (
+                      <span className="text-amber-700 font-semibold animate-pulse">Đang định vị địa chỉ thực...</span>
+                    ) : isLocatingGps ? (
+                      <span className="text-amber-700 font-semibold animate-pulse">Đang dò vệ tinh GPS...</span>
+                    ) : gpsError ? (
+                      <span className="text-clay font-medium">{gpsError}</span>
+                    ) : (
+                      <span className="text-pine-2">Chưa xác định vị trí</span>
+                    )}
+                  </div>
+                  {gpsCoords && (
+                    <div className="text-[10px] text-pine-2/70 mt-0.5">
+                      Tọa độ thực: {gpsCoords.lat.toFixed(4)}, {gpsCoords.lng.toFixed(4)}
+                      {gpsCoords.accuracy ? ` (sai số ±${gpsCoords.accuracy}m)` : ''}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <button
                 type="button"
                 onClick={requestGps}
-                disabled={isLocatingGps}
-                className="text-moss font-bold hover:underline flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-kraft tap-active"
-                title="Lấy lại tọa độ GPS thực"
+                disabled={isLocatingGps || isResolvingAddress}
+                className="text-moss font-bold hover:underline flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-kraft tap-active flex-shrink-0"
+                title="Lấy lại vị trí thực tế"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin' : ''}`} />
-                <span>{isLocatingGps ? 'Đang lấy...' : 'Lấy lại GPS'}</span>
+                <RefreshCw className={`w-3.5 h-3.5 ${isLocatingGps || isResolvingAddress ? 'animate-spin' : ''}`} />
+                <span>{isLocatingGps || isResolvingAddress ? 'Đang tìm...' : 'Định vị lại'}</span>
               </button>
             </div>
 
@@ -674,7 +726,7 @@ export default function StaffAttendancePage() {
                 <div className="font-mono font-bold text-xl">{currentTimeDisplay}</div>
                 <div className="text-xs font-semibold text-kraft-dark">{currentDateDisplay}</div>
                 <div className="text-[11px] text-moss font-medium line-clamp-1">
-                  {settings?.store_name} • {gpsCoords ? `GPS: ${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}${gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''}` : gpsError || (isLocatingGps ? 'Đang dò GPS...' : 'GPS: Không khả dụng')}
+                  {settings?.store_name} • {locationAddress || (isResolvingAddress ? 'Đang xác định địa chỉ...' : (gpsCoords ? `Vị trí: ${gpsCoords.lat.toFixed(4)}, ${gpsCoords.lng.toFixed(4)}` : gpsError || 'Đang định vị...'))}
                 </div>
               </div>
             </div>
@@ -742,6 +794,20 @@ export default function StaffAttendancePage() {
                   alt="Ảnh chấm công đã đóng dấu"
                   className="w-full h-full object-contain"
                 />
+              </div>
+
+              {/* Location & Time summary banner */}
+              <div className="p-3 bg-kraft rounded-2xl border border-brass/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-pine">
+                  <MapPin className="w-4 h-4 text-moss flex-shrink-0" />
+                  <span className="line-clamp-1">
+                    {locationAddress || (gpsCoords ? `Tọa độ: ${gpsCoords.lat.toFixed(4)}, ${gpsCoords.lng.toFixed(4)}` : 'Đang định vị')}
+                  </span>
+                </div>
+                <div className="text-[11px] text-pine-2 flex items-center justify-between">
+                  <span>Loại ca: <strong className="text-pine">{activeCheckType === 'check_in' ? 'Vào ca' : 'Kết ca'}</strong></span>
+                  <span>{currentTimeDisplay} • {currentDateDisplay}</span>
+                </div>
               </div>
 
               {/* Action buttons */}

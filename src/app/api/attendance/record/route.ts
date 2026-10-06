@@ -12,6 +12,7 @@ const attendanceSchema = z.object({
   photo_base64: z.string().min(10, 'Ảnh chụp không hợp lệ'),
   latitude: z.number().nullable().optional(),
   longitude: z.number().nullable().optional(),
+  location_address: z.string().max(255).optional(),
   device_id: z.string().min(1, 'Thiết bị không xác định'),
   note: z.string().max(300).optional(),
 });
@@ -107,7 +108,7 @@ export async function handleAttendanceSubmission(request: Request, forcedType?: 
       captured_at_client: validated.captured_at_client,
       captured_at_server: serverNow.toISOString(),
       photo_url: uploadedPath,
-      location_name: settings.store_name,
+      location_name: validated.location_address || settings.store_name,
       latitude: validated.latitude ?? null,
       longitude: validated.longitude ?? null,
       distance_meters: distanceMeters,
