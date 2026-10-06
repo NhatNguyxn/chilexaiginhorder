@@ -17,11 +17,11 @@ export const menuService = {
       .is('deleted_at', null)
       .order('sort_order', { ascending: true });
 
-    if (error) {
-      console.error('[menuService.getCategories] Error:', error.message);
+    if (error || !data || data.length === 0) {
+      if (error) console.warn('[menuService.getCategories] Warning:', error.message);
       return [...localCategories];
     }
-    return data || [];
+    return data;
   },
 
   async getMenuItems(): Promise<MenuItem[]> {
@@ -35,11 +35,11 @@ export const menuService = {
       .is('deleted_at', null)
       .order('sort_order', { ascending: true });
 
-    if (error) {
-      console.error('[menuService.getMenuItems] Error:', error.message);
+    if (error || !data || data.length === 0) {
+      if (error) console.warn('[menuService.getMenuItems] Warning:', error.message);
       return [...localItems];
     }
-    return data || [];
+    return data;
   },
 
   async createMenuItem(item: Omit<MenuItem, 'id'>): Promise<MenuItem> {

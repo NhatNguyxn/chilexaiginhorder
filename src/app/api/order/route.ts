@@ -62,14 +62,28 @@ export async function POST(request: Request) {
     }
 
     // 2. Lookup table by qr_token (or fallback to slug)
-    const { data: table, error: tableErr } = await db
+    let { data: table, error: tableErr } = await db
       .from('tables')
       .select('id, name, slug, qr_token, is_active')
       .or(`qr_token.eq.${validated.table_token},slug.eq.${validated.table_token}`)
       .is('deleted_at', null)
       .maybeSingle();
 
-    if (tableErr || !table || table.is_active === false) {
+    if (!table) {
+      const { ensureInitialStoreData } = await import('@/lib/services/bootstrap.service');
+      await ensureInitialStoreData(db);
+
+      const retryTable = await db
+        .from('tables')
+        .select('id, name, slug, qr_token, is_active')
+        .or(`qr_token.eq.${validated.table_token},slug.eq.${validated.table_token}`)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      table = retryTable.data;
+    }
+
+    if (!table || table.is_active === false) {
       return NextResponse.json(
         { error: 'Mã bàn không hợp lệ hoặc bàn đã ngưng phục vụ' },
         { status: 400 }
@@ -78,13 +92,26 @@ export async function POST(request: Request) {
 
     // 3. Look up real prices and availability from menu_items
     const itemIds = validated.items.map((i) => i.menuItemId);
-    const { data: menuItems, error: menuErr } = await db
+    let { data: menuItems, error: menuErr } = await db
       .from('menu_items')
       .select('id, name, price, is_available')
       .in('id', itemIds)
       .is('deleted_at', null);
 
-    if (menuErr || !menuItems) {
+    if (!menuItems || menuItems.length === 0) {
+      const { ensureInitialStoreData } = await import('@/lib/services/bootstrap.service');
+      await ensureInitialStoreData(db);
+
+      const retryMenu = await db
+        .from('menu_items')
+        .select('id, name, price, is_available')
+        .in('id', itemIds)
+        .is('deleted_at', null);
+
+      menuItems = retryMenu.data;
+    }
+
+    if (!menuItems || menuItems.length === 0) {
       return NextResponse.json(
         { error: 'Lỗi truy vấn thực đơn quán' },
         { status: 500 }

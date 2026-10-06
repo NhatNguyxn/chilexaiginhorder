@@ -28,11 +28,11 @@ export const tableService = {
       .is('deleted_at', null)
       .order('name', { ascending: true });
 
-    if (error) {
-      console.error('[tableService.getTables] Error:', error.message);
+    if (error || !data || data.length === 0) {
+      if (error) console.warn('[tableService.getTables] Warning:', error.message);
       return [...localTables];
     }
-    return data || [];
+    return data;
   },
 
   async getTableBySlug(slug: string): Promise<Table | null> {
@@ -47,8 +47,7 @@ export const tableService = {
       .is('deleted_at', null)
       .maybeSingle();
 
-    if (error) {
-      console.error('[tableService.getTableBySlug] Error:', error.message);
+    if (error || !data) {
       return localTables.find((t) => t.slug === slug) || null;
     }
     return data;
@@ -66,9 +65,8 @@ export const tableService = {
       .is('deleted_at', null)
       .maybeSingle();
 
-    if (error) {
-      console.error('[tableService.getTableByToken] Error:', error.message);
-      return localTables.find((t) => t.qr_token === token || t.slug === token) || null;
+    if (error || !data) {
+      return localTables.find((t) => (t.qr_token === token || t.slug === token)) || null;
     }
     return data;
   },

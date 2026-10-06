@@ -105,11 +105,10 @@ async function runLiveE2ETest() {
 
   if (!createStaffRes.ok) {
     console.warn('  ⚠️ Tạo nhân viên qua API trả về:', createStaffRes.data);
-    // Nếu nhân viên đã tồn tại hoặc lỗi, ta kiểm tra danh sách nhân viên
     const listRes = await apiFetch('/api/admin/staff', {}, adminCookieHeader);
     console.log('  Danh sách nhân viên hiện có:', listRes.data.staff?.length || 0);
   } else {
-    testStaffId = createStaffRes.data.staff?.id;
+    testStaffId = createStaffRes.data.profile?.id || createStaffRes.data.staff?.id;
     console.log('  ✅ Tạo nhân viên thành công!');
     console.log('  Tên đăng nhập:', testUsername);
     console.log('  Mật khẩu:', testPassword);
@@ -118,7 +117,6 @@ async function runLiveE2ETest() {
 
   // --- BƯỚC 4: NHÂN VIÊN ĐĂNG NHẬP ---
   console.log('\n📌 BƯỚC 4: Nhân viên đăng nhập vào hệ thống...');
-  // Thử đăng nhập bằng nhân viên vừa tạo, nếu không có thì dùng tài khoản admin đăng nhập ca
   const staffUsernameToLogin = testStaffId ? testUsername : '0333859626';
   const staffPasswordToLogin = testStaffId ? testPassword : 'MebanManh@@@626';
 
@@ -136,7 +134,8 @@ async function runLiveE2ETest() {
 
   staffCookieHeader = staffLoginRes.newCookies;
   console.log('  ✅ Nhân viên đăng nhập thành công!');
-  console.log('  Tên nhân viên:', staffLoginRes.data.user?.full_name);
+  console.log('  Role:', staffLoginRes.data.role);
+  console.log('  Tên nhân viên:', staffLoginRes.data.user?.user_metadata?.full_name || staffUsernameToLogin);
 
   // --- BƯỚC 5: NHÂN VIÊN VÀO CA (CHECK-IN) ---
   console.log('\n📌 BƯỚC 5: Nhân viên chụp ảnh thực hiện VÀO CA (Check-in)...');
