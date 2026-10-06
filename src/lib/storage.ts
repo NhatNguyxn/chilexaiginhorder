@@ -18,15 +18,35 @@ export const storageService = {
       return `local://${filePath}`;
     }
 
-    const { error } = await admin.storage
+    let { error } = await admin.storage
       .from(BUCKET_NAME)
       .upload(filePath, fileBuffer, {
         contentType,
         upsert: true,
       });
 
+    if (error && (error.message?.toLowerCase().includes('not found') || error.message?.toLowerCase().includes('bucket'))) {
+      try {
+        console.warn('[storageService] Bucket "attendance" missing, attempting auto-creation...');
+        await admin.storage.createBucket(BUCKET_NAME, {
+          public: false,
+          fileSizeLimit: 10485760,
+        });
+
+        const retry = await admin.storage
+          .from(BUCKET_NAME)
+          .upload(filePath, fileBuffer, {
+            contentType,
+            upsert: true,
+          });
+        error = retry.error;
+      } catch (bucketErr) {
+        console.warn('[storageService] Bucket auto-creation warning:', bucketErr);
+      }
+    }
+
     if (error) {
-      console.error('[storageService.uploadAttendancePhoto] Upload error:', error.message);
+      console.warn('[storageService.uploadAttendancePhoto] Upload warning:', error.message);
       // Fallback: return file path so DB can still record it
     }
 

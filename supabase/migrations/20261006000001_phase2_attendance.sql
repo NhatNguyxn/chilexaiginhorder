@@ -125,6 +125,29 @@ CREATE POLICY "Quản lý và Chủ quán xem yêu cầu sửa công"
 CREATE POLICY "Quản lý và Chủ quán duyệt yêu cầu sửa công"
   ON attendance_adjustments FOR UPDATE USING (is_manager_or_owner());
 
+-- 4. BUCKET LƯU TRỮ ẢNH CHẤM CÔNG (STORAGE.BUCKETS)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'attendance',
+  'attendance',
+  false,
+  10485760,
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Liên kết khóa ngoại với profiles nếu có
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'fk_attendance_records_profiles'
+  ) THEN
+    ALTER TABLE attendance_records
+      ADD CONSTRAINT fk_attendance_records_profiles
+      FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
+
 -- ==============================================================================
 -- THỦ TỤC TỰ ĐỘNG ĐÓNG CA KHI QUÁ 23:59 (AUTO-CLOSE PROCEDURE)
 -- ==============================================================================

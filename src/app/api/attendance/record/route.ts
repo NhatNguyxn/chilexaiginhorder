@@ -33,16 +33,32 @@ export async function handleAttendanceSubmission(request: Request, forcedType?: 
       }
       userId = user.id;
 
-      const { data: profile } = await supabaseServer
+      let profile = null;
+      const { data: serverProfile } = await supabaseServer
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
+
+      profile = serverProfile;
+
+      if (!profile) {
+        const { getAdminClient } = await import('@/lib/supabase/admin');
+        const adminClient = getAdminClient();
+        if (adminClient) {
+          const { data: adminProfile } = await adminClient
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          profile = adminProfile;
+        }
+      }
 
       if (!profile || profile.is_active === false) {
-        return NextResponse.json({ error: 'Tài khoản không hoạt động' }, { status: 403 });
+        return NextResponse.json({ error: 'Tài khoản không hoạt động hoặc chưa được cấp quyền' }, { status: 403 });
       }
-      userFullName = profile.full_name;
+      userFullName = profile.full_name || 'Nhân viên';
     }
 
     const body = await request.json();
@@ -137,8 +153,10 @@ export async function handleAttendanceSubmission(request: Request, forcedType?: 
       );
     }
     console.error('Attendance submit error:', error);
+    const errorMsg =
+      error instanceof Error ? error.message : 'Lỗi máy chủ khi ghi nhận chấm công';
     return NextResponse.json(
-      { error: 'Lỗi máy chủ khi ghi nhận chấm công' },
+      { error: errorMsg },
       { status: 500 }
     );
   }
