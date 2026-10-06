@@ -26,7 +26,7 @@ DROP FUNCTION IF EXISTS get_current_role() CASCADE;
 -- 2. BẢNG HỒ SƠ TÀI KHOẢN (PROFILES)
 -- Thay thế staff_users cũ, liên kết trực tiếp với auth.users
 CREATE TABLE IF NOT EXISTS profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE RESTRICT,
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
   full_name TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('owner', 'manager', 'cashier', 'staff')),
