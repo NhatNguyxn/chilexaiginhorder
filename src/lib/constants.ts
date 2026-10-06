@@ -1,7 +1,8 @@
 import { MenuCategory, MenuItem, Table } from '@/types';
 
 export const STORE_NAME = 'Chị Lệ xai gính';
-export const STORE_TAGLINE = 'Nước mát mỗi ngày & Đặc sản Hoàng Su Phì';
+export const STORE_TAGLINE = 'Nước mát mỗi ngày & Trà ngon Tuyên Quang';
+export const STORE_ADDRESS = 'Quảng trường Nguyễn Tất Thành, Tỉnh Tuyên Quang';
 export const STORE_PHONE = '0333859626';
 export const STORE_PHONE_DISPLAY = '0333 859 626';
 

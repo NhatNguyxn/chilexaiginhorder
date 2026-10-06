@@ -5,9 +5,9 @@ import { getAdminClient } from '@/lib/supabase/admin';
 const DEFAULT_SETTINGS: StoreSettings = {
   id: 'a0000000-0000-0000-0000-000000000001',
   store_name: 'Chị Lệ xai gính',
-  address: 'Khu phố ẩm thực Hoàng Su Phì, Tỉnh Hà Giang',
-  latitude: 22.753333,
-  longitude: 104.685278,
+  address: 'Quảng trường Nguyễn Tất Thành, Tỉnh Tuyên Quang',
+  latitude: 21.8197,
+  longitude: 105.2172,
   radius_meters: 150,
   warning_mode: 'warn_only',
   ip_whitelist: [],
@@ -21,11 +21,27 @@ let localAdjustments: AttendanceAdjustment[] = [];
 
 export const attendanceService = {
   async getSettings(): Promise<StoreSettings> {
-    if (!isSupabaseConfigured || !supabase) {
+    // 1. In browser, fetch via server API for reliable auth & RLS bypass
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/admin/attendance?mode=settings');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.settings) {
+            return data.settings;
+          }
+        }
+      } catch (err) {
+        console.warn('[attendanceService.getSettings] API warning, trying fallback:', err);
+      }
+    }
+
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       return { ...localSettings };
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('store_settings')
       .select('*')
       .limit(1)
@@ -38,12 +54,27 @@ export const attendanceService = {
   },
 
   async updateSettings(updates: Partial<StoreSettings>, updatedBy?: string): Promise<StoreSettings> {
-    if (!isSupabaseConfigured || !supabase) {
+    // 1. In browser, call dedicated server API route
+    if (typeof window !== 'undefined') {
+      const res = await fetch('/api/admin/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: updates }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi lưu cấu hình');
+      }
+      return data.settings;
+    }
+
+    const db = getAdminClient() || supabase;
+    if (!isSupabaseConfigured || !db) {
       localSettings = { ...localSettings, ...updates, updated_at: new Date().toISOString() };
       return localSettings;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('store_settings')
       .update({
         ...updates,

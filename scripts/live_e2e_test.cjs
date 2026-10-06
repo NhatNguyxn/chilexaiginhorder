@@ -60,7 +60,7 @@ async function runLiveE2ETest() {
   }
   console.log('  ✅ /api/time: Giờ máy chủ chuẩn:', timeRes.data.iso);
 
-  const geoRes = await apiFetch('/api/geo/reverse?lat=22.753333&lon=104.685278');
+  const geoRes = await apiFetch('/api/geo/reverse?lat=21.8197&lon=105.2172');
   console.log('  ✅ /api/geo/reverse: Giải mã vị trí thực:', geoRes.data.address || geoRes.data);
 
   // --- BƯỚC 2: ADMIN LOGIN ---
@@ -149,9 +149,9 @@ async function runLiveE2ETest() {
         check_type: 'check_in',
         captured_at_client: nowIso,
         photo_base64: TEST_JPEG_BASE64,
-        latitude: 22.753333,
-        longitude: 104.685278,
-        location_address: 'Khu ẩm thực Hoàng Su Phì, Tỉnh Hà Giang',
+        latitude: 21.8197,
+        longitude: 105.2172,
+        location_address: 'Quảng trường Nguyễn Tất Thành, Tỉnh Tuyên Quang',
         device_id: 'dev_test_e2e_runner',
       }),
     },
@@ -208,9 +208,9 @@ async function runLiveE2ETest() {
         check_type: 'check_out',
         captured_at_client: checkOutIso,
         photo_base64: TEST_JPEG_BASE64,
-        latitude: 22.753333,
-        longitude: 104.685278,
-        location_address: 'Khu ẩm thực Hoàng Su Phì, Tỉnh Hà Giang',
+        latitude: 21.8197,
+        longitude: 105.2172,
+        location_address: 'Quảng trường Nguyễn Tất Thành, Tỉnh Tuyên Quang',
         device_id: 'dev_test_e2e_runner',
       }),
     },

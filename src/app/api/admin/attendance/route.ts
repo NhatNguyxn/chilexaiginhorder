@@ -45,6 +45,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ records: [], total: 0 });
     }
 
+    // Support fetching store settings
+    if (mode === 'settings') {
+      const { data: settingsData } = await db
+        .from('store_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      return NextResponse.json({ settings: settingsData });
+    }
+
     let query = db.from('attendance_records').select('*', { count: 'exact' });
 
     if (mode === 'today') {
@@ -122,15 +133,34 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
+    const db = getAdminClient();
+    if (!db) {
+      return NextResponse.json({ error: 'Chưa cấu hình cơ sở dữ liệu' }, { status: 500 });
+    }
+
+    // Support updating store settings
+    if (body.settings) {
+      const updates = {
+        ...body.settings,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await db
+        .from('store_settings')
+        .update(updates)
+        .eq('id', updates.id || 'a0000000-0000-0000-0000-000000000001')
+        .select()
+        .single();
+
+      if (error) {
+        return NextResponse.json({ error: `Lỗi cập nhật cấu hình: ${error.message}` }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, settings: data });
+    }
+
     const { id, captured_at_server, status, note } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Thiếu mã bản ghi' }, { status: 400 });
-    }
-
-    const db = getAdminClient();
-    if (!db) {
-      return NextResponse.json({ error: 'Chưa cấu hình cơ sở dữ liệu' }, { status: 500 });
     }
 
     const updates: Record<string, unknown> = {};

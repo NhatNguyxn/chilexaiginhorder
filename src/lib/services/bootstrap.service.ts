@@ -75,6 +75,19 @@ export async function ensureInitialStoreData(db: SupabaseClient | null): Promise
       console.log('[Bootstrap] Seeding menu items into Supabase...');
       await db.from('menu_items').upsert(SEED_MENU_ITEMS, { onConflict: 'id' });
     }
+
+    // 4. Update store_settings to real store location
+    await db.from('store_settings').upsert({
+      id: 'a0000000-0000-0000-0000-000000000001',
+      store_name: 'Chị Lệ xai gính',
+      address: 'Quảng trường Nguyễn Tất Thành, Tỉnh Tuyên Quang',
+      latitude: 21.8197,
+      longitude: 105.2172,
+      radius_meters: 150,
+      warning_mode: 'warn_only',
+      photo_retention_days: 90,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
   } catch (err) {
     console.warn('[Bootstrap] Auto-seed warning:', err);
   } finally {

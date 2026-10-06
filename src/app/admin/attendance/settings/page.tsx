@@ -10,9 +10,9 @@ export default function AttendanceSettingsPage() {
   const [settings, setSettings] = useState<StoreSettings>({
     id: 'a0000000-0000-0000-0000-000000000001',
     store_name: 'Chị Lệ xai gính',
-    address: 'Khu phố ẩm thực Hoàng Su Phì, Hà Giang',
-    latitude: 22.753333,
-    longitude: 104.685278,
+    address: 'Quảng trường Nguyễn Tất Thành, Tỉnh Tuyên Quang',
+    latitude: 21.8197,
+    longitude: 105.2172,
     radius_meters: 150,
     warning_mode: 'warn_only',
     ip_whitelist: [],
