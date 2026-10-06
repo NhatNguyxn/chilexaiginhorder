@@ -45,16 +45,16 @@ export async function POST(request: Request) {
       }
 
       try {
-        const { data: usersData, error: listErr } = await adminClient.auth.admin.listUsers();
+        const { data: usersData, error: listErr } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
         if (listErr) {
           console.error('[Auth API] listUsers error:', listErr);
         }
 
-        const existing = usersData?.users.find(
+        const existing = usersData?.users?.find(
           (u) => u.email?.toLowerCase() === internalEmail.toLowerCase()
         );
 
-        let adminUserId: string;
+        let adminUserId: string | null = null;
 
         if (existing) {
           // Update existing admin user to guarantee password matches and email is confirmed
@@ -82,28 +82,37 @@ export async function POST(request: Request) {
             },
           });
 
-          if (createErr || !created?.user) {
-            console.error('[Auth API] createUser error:', createErr);
-            return NextResponse.json(
-              { error: `Lỗi tạo tài khoản GoTrue: ${createErr?.message || 'Không thể tạo user'}` },
-              { status: 500 }
-            );
+          if (createErr) {
+            if (createErr.message?.toLowerCase().includes('already been registered')) {
+              console.log('[Auth API] Admin user already registered in GoTrue, proceeding to authenticate...');
+            } else {
+              console.error('[Auth API] createUser error:', createErr);
+              return NextResponse.json(
+                { error: `Lỗi tạo tài khoản GoTrue: ${createErr.message}` },
+                { status: 500 }
+              );
+            }
           }
-          adminUserId = created.user.id;
+
+          if (created?.user) {
+            adminUserId = created.user.id;
+          }
         }
 
-        // Upsert profile for this user
-        const { error: profileUpsertErr } = await adminClient.from('profiles').upsert({
-          id: adminUserId,
-          username: '0333859626',
-          full_name: 'Admin (Chủ quán)',
-          role: 'owner',
-          is_active: true,
-          hourly_rate: 0,
-        });
+        // Upsert profile for this user if ID is available
+        if (adminUserId) {
+          const { error: profileUpsertErr } = await adminClient.from('profiles').upsert({
+            id: adminUserId,
+            username: '0333859626',
+            full_name: 'Admin (Chủ quán)',
+            role: 'owner',
+            is_active: true,
+            hourly_rate: 0,
+          });
 
-        if (profileUpsertErr) {
-          console.error('[Auth API] profile upsert error:', profileUpsertErr);
+          if (profileUpsertErr) {
+            console.error('[Auth API] profile upsert error:', profileUpsertErr);
+          }
         }
       } catch (adminErr: unknown) {
         console.error('[Auth API] Admin bootstrap error:', adminErr);
