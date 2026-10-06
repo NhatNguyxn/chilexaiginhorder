@@ -33,59 +33,77 @@ export async function POST(request: Request) {
     const adminClient = getAdminClient();
 
     // Self-healing bootstrap for the requested Admin account (0333859626)
-    if (adminClient && cleanUsername === '0333859626') {
+    if (cleanUsername === '0333859626') {
+      if (!adminClient) {
+        return NextResponse.json(
+          {
+            error:
+              'Thiếu biến môi trường SUPABASE_SERVICE_ROLE_KEY trên Vercel. Vui lòng vào Vercel Settings -> Environment Variables để thêm biến này, sau đó Redeploy.',
+          },
+          { status: 500 }
+        );
+      }
+
       try {
-        const { data: usersData } = await adminClient.auth.admin.listUsers();
+        const { data: usersData, error: listErr } = await adminClient.auth.admin.listUsers();
+        if (listErr) {
+          console.error('[Auth API] listUsers error:', listErr);
+        }
+
         const existing = usersData?.users.find(
           (u) => u.email?.toLowerCase() === internalEmail.toLowerCase()
         );
 
-        if (!existing) {
-          // Create admin user automatically with confirmed email
-          const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
-            email: internalEmail,
-            password: cleanPassword,
-            email_confirm: true,
-            user_metadata: {
-              username: '0333859626',
-              full_name: 'Admin (Chủ quán)',
-            },
-          });
+        if (existing) {
+          // Delete old corrupted user to guarantee clean GoTrue identities and bcrypt salt
+          console.log('[Auth API] Re-creating existing admin user to ensure valid identities:', existing.id);
+          await adminClient.auth.admin.deleteUser(existing.id);
+        }
 
-          if (createErr) {
-            console.error('[Auth API] Error creating admin user:', createErr.message);
-          } else if (created?.user) {
-            await adminClient.from('profiles').upsert({
-              id: created.user.id,
-              username: '0333859626',
-              full_name: 'Admin (Chủ quán)',
-              role: 'owner',
-              is_active: true,
-              hourly_rate: 0,
-            });
-          }
-        } else {
-          // Update password, ensure email is confirmed, and ensure profile is active owner
-          await adminClient.auth.admin.updateUserById(existing.id, {
-            password: cleanPassword,
-            email_confirm: true,
-            user_metadata: {
-              username: '0333859626',
-              full_name: 'Admin (Chủ quán)',
-            },
-          });
-
-          await adminClient.from('profiles').upsert({
-            id: existing.id,
+        // Create fresh admin user with confirmed email and exact password
+        const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
+          email: internalEmail,
+          password: cleanPassword,
+          email_confirm: true,
+          user_metadata: {
             username: '0333859626',
             full_name: 'Admin (Chủ quán)',
-            role: 'owner',
-            is_active: true,
-            hourly_rate: 0,
-          });
+          },
+        });
+
+        if (createErr || !created?.user) {
+          console.error('[Auth API] createUser error:', createErr);
+          return NextResponse.json(
+            { error: `Lỗi tạo tài khoản GoTrue: ${createErr?.message || 'Không thể tạo user'}` },
+            { status: 500 }
+          );
         }
-      } catch (adminErr) {
+
+        const newUserId = created.user.id;
+
+        // Upsert profile for this user
+        const { error: profileUpsertErr } = await adminClient.from('profiles').upsert({
+          id: newUserId,
+          username: '0333859626',
+          full_name: 'Admin (Chủ quán)',
+          role: 'owner',
+          is_active: true,
+          hourly_rate: 0,
+        });
+
+        if (profileUpsertErr) {
+          console.error('[Auth API] profile upsert error:', profileUpsertErr);
+        }
+      } catch (adminErr: unknown) {
         console.error('[Auth API] Admin bootstrap error:', adminErr);
+        return NextResponse.json(
+          {
+            error: `Lỗi bootstrap admin: ${
+              adminErr instanceof Error ? adminErr.message : 'Không xác định'
+            }`,
+          },
+          { status: 500 }
+        );
       }
     }
 
