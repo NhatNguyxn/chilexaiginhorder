@@ -54,36 +54,47 @@ export async function POST(request: Request) {
           (u) => u.email?.toLowerCase() === internalEmail.toLowerCase()
         );
 
+        let adminUserId: string;
+
         if (existing) {
-          // Delete old corrupted user to guarantee clean GoTrue identities and bcrypt salt
-          console.log('[Auth API] Re-creating existing admin user to ensure valid identities:', existing.id);
-          await adminClient.auth.admin.deleteUser(existing.id);
+          // Update existing admin user to guarantee password matches and email is confirmed
+          const { error: updateErr } = await adminClient.auth.admin.updateUserById(existing.id, {
+            password: cleanPassword,
+            email_confirm: true,
+            user_metadata: {
+              username: '0333859626',
+              full_name: 'Admin (Chủ quán)',
+            },
+          });
+          if (updateErr) {
+            console.warn('[Auth API] updateUserById warning:', updateErr);
+          }
+          adminUserId = existing.id;
+        } else {
+          // Create fresh admin user with confirmed email and exact password
+          const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
+            email: internalEmail,
+            password: cleanPassword,
+            email_confirm: true,
+            user_metadata: {
+              username: '0333859626',
+              full_name: 'Admin (Chủ quán)',
+            },
+          });
+
+          if (createErr || !created?.user) {
+            console.error('[Auth API] createUser error:', createErr);
+            return NextResponse.json(
+              { error: `Lỗi tạo tài khoản GoTrue: ${createErr?.message || 'Không thể tạo user'}` },
+              { status: 500 }
+            );
+          }
+          adminUserId = created.user.id;
         }
-
-        // Create fresh admin user with confirmed email and exact password
-        const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
-          email: internalEmail,
-          password: cleanPassword,
-          email_confirm: true,
-          user_metadata: {
-            username: '0333859626',
-            full_name: 'Admin (Chủ quán)',
-          },
-        });
-
-        if (createErr || !created?.user) {
-          console.error('[Auth API] createUser error:', createErr);
-          return NextResponse.json(
-            { error: `Lỗi tạo tài khoản GoTrue: ${createErr?.message || 'Không thể tạo user'}` },
-            { status: 500 }
-          );
-        }
-
-        const newUserId = created.user.id;
 
         // Upsert profile for this user
         const { error: profileUpsertErr } = await adminClient.from('profiles').upsert({
-          id: newUserId,
+          id: adminUserId,
           username: '0333859626',
           full_name: 'Admin (Chủ quán)',
           role: 'owner',
