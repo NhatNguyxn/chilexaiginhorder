@@ -23,7 +23,6 @@ const patchStaffSchema = z.object({
   full_name: z.string().min(2).optional(),
 });
 
-// Helper checking caller permissions
 async function getCallerProfile() {
   const serverClient = await createClient();
   if (!serverClient) return null;
@@ -31,12 +30,28 @@ async function getCallerProfile() {
   const { data: { user } } = await serverClient.auth.getUser();
   if (!user) return null;
 
-  const { data: profile } = await serverClient
+  let profile = null;
+  const { data: clientProfile } = await serverClient
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .is('deleted_at', null)
-    .single();
+    .maybeSingle();
+
+  profile = clientProfile;
+
+  if (!profile) {
+    const adminClient = getAdminClient();
+    if (adminClient) {
+      const { data: adminProf } = await adminClient
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      profile = adminProf;
+    }
+  }
 
   return profile;
 }
