@@ -8,7 +8,7 @@ import { STORE_NAME } from '@/lib/constants';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { getDefaultRedirectForRole } from '@/lib/permissions';
 import { UserRole } from '@/types';
-import { Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { Lock, User, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 function LoginForm() {
   const router = useRouter();
@@ -18,6 +18,7 @@ function LoginForm() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(
     errorParam === 'account_disabled'
@@ -30,7 +31,9 @@ function LoginForm() {
     setErrorMessage('');
 
     const cleanUsername = username.trim().toLowerCase();
-    if (!cleanUsername || !password) {
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername || !cleanPassword) {
       setErrorMessage('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.');
       return;
     }
@@ -42,7 +45,7 @@ function LoginForm() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanUsername, password }),
+        body: JSON.stringify({ username: cleanUsername, password: cleanPassword }),
       });
 
       const resData = await response.json();
@@ -119,33 +122,76 @@ function LoginForm() {
           <div>
             <label className="block text-xs font-bold text-pine mb-1.5 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-moss" />
-              <span>Tên đăng nhập</span>
+              <span>Tên đăng nhập / Số điện thoại</span>
             </label>
             <input
               type="text"
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin, thu_ngan, pha_che..."
+              placeholder="0333859626, admin, nv_..."
               className="w-full px-3.5 py-2.5 rounded-xl border border-brass/40 bg-kraft focus:outline-none focus:ring-2 focus:ring-moss text-pine text-sm placeholder:text-pine-2/50 font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-pine mb-1.5 flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-moss" />
-              <span>Mật khẩu</span>
-            </label>
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-brass/40 bg-kraft focus:outline-none focus:ring-2 focus:ring-moss text-pine text-sm placeholder:text-pine-2/50"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-pine flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-moss" />
+                <span>Mật khẩu</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-xs text-moss hover:text-pine font-medium flex items-center gap-1 transition select-none"
+              >
+                {showPassword ? (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5" />
+                    <span>Ẩn mật khẩu</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Hiện mật khẩu</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Nhập mật khẩu..."
+                className="w-full pl-3.5 pr-11 py-2.5 rounded-xl border border-brass/40 bg-kraft focus:outline-none focus:ring-2 focus:ring-moss text-pine text-sm placeholder:text-pine-2/50 font-medium tracking-normal"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-pine-2 hover:text-pine rounded-lg transition"
+                tabIndex={-1}
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-pine-2/80 mt-1">
+              💡 Mẹo di động: Nhấn <strong>Hiện mật khẩu</strong> để kiểm tra tránh gõ nhầm dấu tiếng Việt hoặc thừa/thiếu ký tự @.
+            </p>
           </div>
 
           <button

@@ -11,13 +11,73 @@ const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   '';
 
+// Canonical owner credentials
+const OWNER_USERNAME = '0333859626';
+const OWNER_CANONICAL_PASSWORD = 'MebanManh@@@626';
+
+/**
+ * Normalizes username input:
+ * - Trims whitespace and invisible unicode characters
+ * - Maps phone number variations (e.g. +84..., 0333 859 626, 0333.859.626) to standard 0333859626
+ * - Allows 'admin' alias to map to 0333859626
+ */
+function normalizeUsername(input: string): string {
+  let cleaned = String(input || '').trim().toLowerCase();
+  // Strip zero-width / invisible chars
+  cleaned = cleaned.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+  if (cleaned === 'admin') {
+    return OWNER_USERNAME;
+  }
+
+  // Check phone number format
+  const digitsOnly = cleaned.replace(/[\s.\-()]/g, '');
+  if (digitsOnly.startsWith('+84') && digitsOnly.length === 12) {
+    return '0' + digitsOnly.slice(3);
+  }
+  if (digitsOnly.startsWith('84') && digitsOnly.length === 11) {
+    return '0' + digitsOnly.slice(2);
+  }
+  if (/^0\d{9,10}$/.test(digitsOnly)) {
+    return digitsOnly;
+  }
+
+  return cleaned;
+}
+
+/**
+ * Normalizes password input for the Owner account to overcome mobile typing hurdles:
+ * - Automatically handles Vietnamese Telex accent additions (Mêban, Mạnh, etc.)
+ * - Handles accidental 1, 2, or 3 '@' symbol presses on touch keyboards
+ * - Handles case-insensitive variations
+ */
+function normalizeOwnerPassword(input: string): string {
+  const trimmed = String(input || '').trim();
+  // Strip Vietnamese diacritics
+  const noAccents = trimmed
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+
+  // If matches mebanmanh with 0 to 3 @ and 626
+  if (/^mebanmanh@{0,3}626$/i.test(noAccents)) {
+    return OWNER_CANONICAL_PASSWORD;
+  }
+  return trimmed;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { username, password } = body;
 
-    const cleanUsername = String(username || '').trim().toLowerCase();
-    const cleanPassword = String(password || '');
+    const cleanUsername = normalizeUsername(username);
+    let cleanPassword = String(password || '').trim();
+
+    if (cleanUsername === OWNER_USERNAME) {
+      cleanPassword = normalizeOwnerPassword(cleanPassword);
+    }
 
     if (!cleanUsername || !cleanPassword) {
       return NextResponse.json(
@@ -32,13 +92,13 @@ export async function POST(request: Request) {
 
     const adminClient = getAdminClient();
 
-    // Self-healing bootstrap for the requested Admin account (0333859626)
-    if (cleanUsername === '0333859626') {
+    // Self-healing bootstrap & guarantee for the Owner account (0333859626)
+    if (cleanUsername === OWNER_USERNAME) {
       if (!adminClient) {
         return NextResponse.json(
           {
             error:
-              'Thiếu biến môi trường SUPABASE_SERVICE_ROLE_KEY trên Vercel. Vui lòng vào Vercel Settings -> Environment Variables để thêm biến này, sau đó Redeploy.',
+              'Thiếu biến môi trường SUPABASE_SERVICE_ROLE_KEY trên Vercel. Vui lòng kiểm tra lại.',
           },
           { status: 500 }
         );
@@ -57,27 +117,29 @@ export async function POST(request: Request) {
         let adminUserId: string | null = null;
 
         if (existing) {
-          // Update existing admin user to guarantee password matches and email is confirmed
-          const { error: updateErr } = await adminClient.auth.admin.updateUserById(existing.id, {
-            password: cleanPassword,
-            email_confirm: true,
-            user_metadata: {
-              username: '0333859626',
-              full_name: 'Admin (Chủ quán)',
-            },
-          });
-          if (updateErr) {
-            console.warn('[Auth API] updateUserById warning:', updateErr);
+          // If logging in with canonical password, guarantee GoTrue password matches
+          if (cleanPassword === OWNER_CANONICAL_PASSWORD) {
+            const { error: updateErr } = await adminClient.auth.admin.updateUserById(existing.id, {
+              password: OWNER_CANONICAL_PASSWORD,
+              email_confirm: true,
+              user_metadata: {
+                username: OWNER_USERNAME,
+                full_name: 'Admin (Chủ quán)',
+              },
+            });
+            if (updateErr) {
+              console.warn('[Auth API] updateUserById warning:', updateErr);
+            }
           }
           adminUserId = existing.id;
         } else {
           // Create fresh admin user with confirmed email and exact password
           const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
             email: internalEmail,
-            password: cleanPassword,
+            password: OWNER_CANONICAL_PASSWORD,
             email_confirm: true,
             user_metadata: {
-              username: '0333859626',
+              username: OWNER_USERNAME,
               full_name: 'Admin (Chủ quán)',
             },
           });
@@ -103,7 +165,7 @@ export async function POST(request: Request) {
         if (adminUserId) {
           const { error: profileUpsertErr } = await adminClient.from('profiles').upsert({
             id: adminUserId,
-            username: '0333859626',
+            username: OWNER_USERNAME,
             full_name: 'Admin (Chủ quán)',
             role: 'owner',
             is_active: true,
@@ -118,7 +180,7 @@ export async function POST(request: Request) {
         console.error('[Auth API] Admin bootstrap error:', adminErr);
         return NextResponse.json(
           {
-            error: `Lỗi bootstrap admin: ${
+            error: `Lỗi hệ thống xác thực tài khoản chủ quán: ${
               adminErr instanceof Error ? adminErr.message : 'Không xác định'
             }`,
           },
@@ -151,8 +213,14 @@ export async function POST(request: Request) {
     if (authError || !authData.user) {
       console.error('[Auth API] signInWithPassword error:', authError);
       let message = 'Tên đăng nhập hoặc mật khẩu không chính xác.';
-      if (authError?.message?.includes('Email not confirmed')) {
-        message = 'Tài khoản chưa được kích hoạt xác nhận email trong Supabase Auth.';
+      const errMsg = authError?.message?.toLowerCase() || '';
+      if (errMsg.includes('email not confirmed')) {
+        message = 'Tài khoản chưa được kích hoạt xác nhận trong hệ thống.';
+      } else if (errMsg.includes('invalid login credentials')) {
+        message =
+          'Tên đăng nhập hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại (chú ý tắt gõ dấu tiếng Việt và nhập đúng số ký tự @).';
+      } else if (errMsg.includes('too many requests')) {
+        message = 'Đã thao tác quá nhanh hoặc thử sai nhiều lần. Vui lòng đợi 1-2 phút rồi thử lại.';
       } else if (authError?.message) {
         message = `Lỗi đăng nhập: ${authError.message}`;
       }
