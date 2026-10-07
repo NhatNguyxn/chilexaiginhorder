@@ -15,15 +15,40 @@ function generateRandomToken(): string {
 let localTables: Table[] = SEED_TABLES.map((t) => ({ ...t }));
 
 // Helper to check owner/manager permission
-async function verifyAdminOrManager(): Promise<boolean> {
-  const supabaseServer = await createClient();
-  if (!supabaseServer) return true; // Local dev mode
+async function verifyAdminOrManager(request?: Request): Promise<boolean> {
+  const adminClient = getAdminClient();
+  let user: { id: string } | null = null;
 
-  const { data: { user } } = await supabaseServer.auth.getUser();
+  if (request && adminClient) {
+    const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      const token = authHeader.slice(7).trim();
+      if (token) {
+        try {
+          const { data: authData } = await adminClient.auth.getUser(token);
+          if (authData?.user) {
+            user = authData.user;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  if (!user) {
+    const supabaseServer = await createClient();
+    if (!supabaseServer) return true; // Local dev mode
+    const { data: { user: cookieUser } } = await supabaseServer.auth.getUser();
+    user = cookieUser;
+  }
+
   if (!user) return false;
 
-  const adminClient = getAdminClient() || supabaseServer;
-  const { data: profile } = await adminClient
+  const db = adminClient || (await createClient());
+  if (!db) return true;
+
+  const { data: profile } = await db
     .from('profiles')
     .select('role')
     .eq('id', user.id)
@@ -68,7 +93,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const isAuthorized = await verifyAdminOrManager();
+    const isAuthorized = await verifyAdminOrManager(request);
     if (!isAuthorized) {
       return NextResponse.json({ error: 'Bạn không có quyền thực hiện thao tác này' }, { status: 403 });
     }
@@ -123,7 +148,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const isAuthorized = await verifyAdminOrManager();
+    const isAuthorized = await verifyAdminOrManager(request);
     if (!isAuthorized) {
       return NextResponse.json({ error: 'Bạn không có quyền thực hiện thao tác này' }, { status: 403 });
     }
@@ -171,7 +196,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const isAuthorized = await verifyAdminOrManager();
+    const isAuthorized = await verifyAdminOrManager(request);
     if (!isAuthorized) {
       return NextResponse.json({ error: 'Bạn không có quyền thực hiện thao tác này' }, { status: 403 });
     }

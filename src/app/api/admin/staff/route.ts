@@ -23,43 +23,121 @@ const patchStaffSchema = z.object({
   full_name: z.string().min(2).optional(),
 });
 
-async function getCallerProfile() {
-  const serverClient = await createClient();
-  if (!serverClient) return null;
+interface CallerAuthResult {
+  user: { id: string; email?: string } | null;
+  profile: any | null;
+  error: string | null;
+  status: number;
+}
 
-  const { data: { user } } = await serverClient.auth.getUser();
-  if (!user) return null;
+async function getCallerProfile(request?: Request): Promise<CallerAuthResult> {
+  const adminClient = getAdminClient();
+  let user: { id: string; email?: string } | null = null;
 
-  let profile = null;
-  const { data: clientProfile } = await serverClient
+  // 1. Try Bearer token from Authorization header first if present
+  if (request && adminClient) {
+    const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      const token = authHeader.slice(7).trim();
+      if (token) {
+        try {
+          const { data: authData, error: authErr } = await adminClient.auth.getUser(token);
+          if (authData?.user && !authErr) {
+            user = authData.user;
+          }
+        } catch (e) {
+          console.warn('[Staff API] Bearer token error:', e);
+        }
+      }
+    }
+  }
+
+  // 2. If no user from Bearer header, try cookies via createClient()
+  if (!user) {
+    const serverClient = await createClient();
+    if (serverClient) {
+      try {
+        const { data: { user: cookieUser } } = await serverClient.auth.getUser();
+        if (cookieUser) {
+          user = cookieUser;
+        }
+      } catch (e) {
+        console.warn('[Staff API] Cookie user error:', e);
+      }
+    }
+  }
+
+  if (!user) {
+    return {
+      user: null,
+      profile: null,
+      error: 'Phiên đăng nhập đã hết hạn hoặc bạn chưa đăng nhập. Vui lòng đăng nhập lại.',
+      status: 401,
+    };
+  }
+
+  // 3. Fetch profile using admin client (bypasses RLS issues)
+  const db = adminClient || (await createClient());
+  if (!db) {
+    return {
+      user,
+      profile: null,
+      error: 'Dịch vụ cơ sở dữ liệu tạm thời không khả dụng.',
+      status: 500,
+    };
+  }
+
+  const { data: profile } = await db
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .is('deleted_at', null)
     .maybeSingle();
 
-  profile = clientProfile;
+  // If profile is missing but user email is 0333859626, auto-heal owner profile
+  if (!profile && user.email?.startsWith('0333859626') && adminClient) {
+    const { data: healed } = await adminClient
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        username: '0333859626',
+        full_name: 'Admin (Chủ quán)',
+        role: 'owner',
+        is_active: true,
+        hourly_rate: 0,
+      })
+      .select()
+      .single();
 
-  if (!profile) {
-    const adminClient = getAdminClient();
-    if (adminClient) {
-      const { data: adminProf } = await adminClient
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .is('deleted_at', null)
-        .maybeSingle();
-      profile = adminProf;
-    }
+    return { user, profile: healed, error: null, status: 200 };
   }
 
-  return profile;
+  if (!profile) {
+    return {
+      user,
+      profile: null,
+      error: 'Không tìm thấy hồ sơ người dùng trong hệ thống.',
+      status: 403,
+    };
+  }
+
+  return { user, profile, error: null, status: 200 };
 }
 
-export async function GET() {
-  const caller = await getCallerProfile();
+export async function GET(request: Request) {
+  const auth = await getCallerProfile(request);
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const caller = auth.profile;
   if (!caller || !['owner', 'manager'].includes(caller.role)) {
-    return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+    return NextResponse.json(
+      {
+        error: `Tài khoản (${caller?.username || 'nhân sự'} - vai trò: ${caller?.role}) không có quyền truy cập danh sách nhân viên.`,
+      },
+      { status: 403 }
+    );
   }
 
   const adminClient = getAdminClient();
@@ -77,13 +155,23 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ staff: data });
+  return NextResponse.json({ staff: data, caller });
 }
 
 export async function POST(request: Request) {
-  const caller = await getCallerProfile();
+  const auth = await getCallerProfile(request);
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const caller = auth.profile;
   if (!caller || caller.role !== 'owner') {
-    return NextResponse.json({ error: 'Chỉ Chủ quán mới có quyền tạo nhân viên' }, { status: 403 });
+    return NextResponse.json(
+      {
+        error: `Tài khoản hiện tại (${caller?.username || 'nhân viên'} - vai trò: ${caller?.role}) không có quyền tạo tài khoản. Chỉ Chủ quán mới có quyền tạo nhân viên mới.`,
+      },
+      { status: 403 }
+    );
   }
 
   const adminClient = getAdminClient();
@@ -160,9 +248,19 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const caller = await getCallerProfile();
+  const auth = await getCallerProfile(request);
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const caller = auth.profile;
   if (!caller || caller.role !== 'owner') {
-    return NextResponse.json({ error: 'Chỉ Chủ quán mới có quyền cập nhật nhân sự' }, { status: 403 });
+    return NextResponse.json(
+      {
+        error: `Tài khoản hiện tại (${caller?.username || 'nhân viên'} - vai trò: ${caller?.role}) không có quyền chỉnh sửa. Chỉ Chủ quán mới có quyền cập nhật nhân sự.`,
+      },
+      { status: 403 }
+    );
   }
 
   const adminClient = getAdminClient();

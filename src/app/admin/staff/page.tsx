@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '@/types';
 import { ROLE_LABELS } from '@/lib/permissions';
 import { formatVND } from '@/lib/constants';
-import { Users, Plus, Shield, CheckCircle2, XCircle, X, KeyRound, Lock, AlertCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
+import { Users, Plus, Shield, CheckCircle2, XCircle, X, KeyRound, Lock, AlertCircle, Crown } from 'lucide-react';
 
 export default function AdminStaffPage() {
   const [staffList, setStaffList] = useState<UserProfile[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -25,15 +27,39 @@ export default function AdminStaffPage() {
   const [resetModalStaff, setResetModalStaff] = useState<UserProfile | null>(null);
   const [newPassword, setNewPassword] = useState('');
 
+  const getAuthHeaders = async () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (supabase) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.access_token) {
+          headers['Authorization'] = `Bearer ${data.session.access_token}`;
+        }
+      } catch (e) {
+        console.warn('Session token fetch error:', e);
+      }
+    }
+    return headers;
+  };
+
   const loadStaff = async () => {
     try {
       setErrorMessage(null);
-      const res = await fetch('/api/admin/staff');
-      if (!res.ok) {
-        throw new Error('Không thể tải danh sách nhân viên hoặc bạn không có quyền.');
-      }
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/admin/staff', { headers });
       const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        }
+        throw new Error(data.error || 'Không thể tải danh sách nhân viên hoặc bạn không có quyền.');
+      }
       setStaffList(data.staff || []);
+      if (data.caller) {
+        setCurrentUser(data.caller);
+      }
     } catch (err: unknown) {
       console.error(err);
       setErrorMessage(err instanceof Error ? err.message : 'Lỗi tải danh sách');
@@ -51,9 +77,10 @@ export default function AdminStaffPage() {
     setErrorMessage(null);
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/admin/staff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           ...formData,
           username: formData.username.trim().toLowerCase(),
@@ -63,6 +90,11 @@ export default function AdminStaffPage() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          alert('Phiên làm việc đã hết hạn. Hệ thống sẽ chuyển bạn đến trang đăng nhập.');
+          window.location.href = '/login?redirect=/admin/staff';
+          return;
+        }
         throw new Error(data.error || 'Lỗi tạo nhân viên');
       }
 
@@ -75,6 +107,7 @@ export default function AdminStaffPage() {
       });
       setIsAddModalOpen(false);
       await loadStaff();
+      alert(`Đã tạo tài khoản "${formData.username}" thành công!`);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Lỗi tạo tài khoản');
     }
@@ -87,17 +120,18 @@ export default function AdminStaffPage() {
     }
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/admin/staff', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           id: staff.id,
           is_active: !staff.is_active,
         }),
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Lỗi cập nhật trạng thái');
       }
 
@@ -112,9 +146,10 @@ export default function AdminStaffPage() {
     if (!resetModalStaff || !newPassword) return;
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/admin/staff', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           id: resetModalStaff.id,
           password: newPassword,
@@ -139,10 +174,31 @@ export default function AdminStaffPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-kraft-card border border-brass/30 p-4 sm:p-5 rounded-2xl shadow-card">
         <div>
-          <h1 className="font-serif font-bold text-xl sm:text-2xl text-pine flex items-center gap-2">
-            <Users className="w-6 h-6 text-moss" />
-            <span>Quản Lý Nhân Viên & Phân Quyền (4 Vai Trò)</span>
-          </h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="font-serif font-bold text-xl sm:text-2xl text-pine flex items-center gap-2">
+              <Users className="w-6 h-6 text-moss" />
+              <span>Quản Lý Nhân Viên & Phân Quyền</span>
+            </h1>
+            {currentUser && (
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                  currentUser.role === 'owner'
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                    : 'bg-moss/10 text-moss border border-moss/30'
+                }`}
+              >
+                {currentUser.role === 'owner' ? (
+                  <Crown className="w-3.5 h-3.5 text-amber-600" />
+                ) : (
+                  <Shield className="w-3.5 h-3.5 text-moss" />
+                )}
+                <span>
+                  Đang đăng nhập: {currentUser.full_name || currentUser.username} (
+                  {ROLE_LABELS[currentUser.role] || currentUser.role})
+                </span>
+              </span>
+            )}
+          </div>
           <p className="text-xs text-pine-2 mt-1">
             Tổng cộng <strong>{staffList.length} tài khoản</strong> nhân sự. Chủ quán có toàn quyền quản trị, phân quyền và đặt lại mật khẩu.
           </p>
@@ -156,6 +212,21 @@ export default function AdminStaffPage() {
           <span>Thêm nhân viên mới</span>
         </button>
       </div>
+
+      {/* Non-owner Warning Banner if applicable */}
+      {currentUser && currentUser.role !== 'owner' && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 flex items-start gap-3 shadow-xs">
+          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold">
+              Bạn đang thao tác với vai trò {ROLE_LABELS[currentUser.role] || currentUser.role} ({currentUser.username}).
+            </p>
+            <p className="text-amber-800">
+              Chỉ tài khoản Chủ quán (<strong>0333859626</strong>) mới có quyền tạo nhân viên mới hoặc chỉnh sửa nhân sự.
+            </p>
+          </div>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="p-4 bg-clay/10 border border-clay/30 rounded-xl text-xs text-clay flex items-center gap-2">
