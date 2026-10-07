@@ -45,39 +45,13 @@ function normalizeUsername(input: string): string {
   return cleaned;
 }
 
-/**
- * Normalizes password input for the Owner account to overcome mobile typing hurdles:
- * - Automatically handles Vietnamese Telex accent additions (Mêban, Mạnh, etc.)
- * - Handles accidental 1, 2, or 3 '@' symbol presses on touch keyboards
- * - Handles case-insensitive variations
- */
-function normalizeOwnerPassword(input: string): string {
-  const trimmed = String(input || '').trim();
-  // Strip Vietnamese diacritics
-  const noAccents = trimmed
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
-
-  // If matches mebanmanh with 0 to 3 @ and 626
-  if (/^mebanmanh@{0,3}626$/i.test(noAccents)) {
-    return OWNER_CANONICAL_PASSWORD;
-  }
-  return trimmed;
-}
-
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { username, password } = body;
 
     const cleanUsername = normalizeUsername(username);
-    let cleanPassword = String(password || '').trim();
-
-    if (cleanUsername === OWNER_USERNAME) {
-      cleanPassword = normalizeOwnerPassword(cleanPassword);
-    }
+    const cleanPassword = String(password || '').trim();
 
     if (!cleanUsername || !cleanPassword) {
       return NextResponse.json(
@@ -117,19 +91,17 @@ export async function POST(request: Request) {
         let adminUserId: string | null = null;
 
         if (existing) {
-          // If logging in with canonical password, guarantee GoTrue password matches
-          if (cleanPassword === OWNER_CANONICAL_PASSWORD) {
-            const { error: updateErr } = await adminClient.auth.admin.updateUserById(existing.id, {
-              password: OWNER_CANONICAL_PASSWORD,
-              email_confirm: true,
-              user_metadata: {
-                username: OWNER_USERNAME,
-                full_name: 'Admin (Chủ quán)',
-              },
-            });
-            if (updateErr) {
-              console.warn('[Auth API] updateUserById warning:', updateErr);
-            }
+          // Always ensure owner account in GoTrue is fixed strictly to OWNER_CANONICAL_PASSWORD
+          const { error: updateErr } = await adminClient.auth.admin.updateUserById(existing.id, {
+            password: OWNER_CANONICAL_PASSWORD,
+            email_confirm: true,
+            user_metadata: {
+              username: OWNER_USERNAME,
+              full_name: 'Admin (Chủ quán)',
+            },
+          });
+          if (updateErr) {
+            console.warn('[Auth API] updateUserById warning:', updateErr);
           }
           adminUserId = existing.id;
         } else {
